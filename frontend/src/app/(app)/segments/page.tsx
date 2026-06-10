@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { fetchApi } from "@/lib/api";
 
@@ -167,10 +168,9 @@ export default function SegmentsPage() {
           ))
         )}
       </div>
-      </div>
 
       {/* Members Modal */}
-      {isMembersModalOpen && (
+      {isMembersModalOpen && typeof document !== "undefined" && createPortal(
         <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div className="card glass-panel-static" style={{ width: "600px", maxHeight: "80vh", display: "flex", flexDirection: "column", padding: "24px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
@@ -207,7 +207,8 @@ export default function SegmentsPage() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

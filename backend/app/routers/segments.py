@@ -3,12 +3,12 @@ Segment API routes — CRUD, preview, refresh.
 """
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, update, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Segment, SegmentMember, Customer
+from app.models import Segment, SegmentMember, Customer, Campaign
 from app.schemas import (
     SegmentCreate, SegmentResponse, CustomerResponse,
     PaginatedResponse, MessageResponse,
@@ -123,6 +123,11 @@ async def delete_segment(segment_id: UUID, db: AsyncSession = Depends(get_db)):
     segment = result.scalar_one_or_none()
     if not segment:
         raise HTTPException(status_code=404, detail="Segment not found")
+
+    # Remove references from campaigns before deleting to avoid IntegrityError
+    await db.execute(
+        update(Campaign).where(Campaign.segment_id == segment_id).values(segment_id=None)
+    )
 
     await db.delete(segment)
     return MessageResponse(message="Segment deleted")
