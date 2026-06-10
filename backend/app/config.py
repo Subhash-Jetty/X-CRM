@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
 
+    # Backend (self-URL for callbacks)
+    BACKEND_URL: str = "http://localhost:8000"
+
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"
 

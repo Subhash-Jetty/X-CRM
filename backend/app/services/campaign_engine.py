@@ -81,7 +81,7 @@ async def send_campaign(db: AsyncSession, campaign_id: UUID) -> int:
                 f"{settings.CHANNEL_SERVICE_URL}/channel/send",
                 json={
                     "communications": communications_batch,
-                    "callback_url": f"{settings.FRONTEND_URL.replace('localhost:3000', 'localhost:8000')}/api/receipts/batch",
+                    "callback_url": f"{settings.BACKEND_URL}/api/receipts/batch",
                 },
             )
             if response.status_code == 200:
