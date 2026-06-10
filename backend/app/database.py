@@ -13,7 +13,7 @@ class Base(DeclarativeBase):
 
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.DATABASE_URL.strip(),
     echo=settings.DEBUG,
     pool_size=5,
     max_overflow=10,
