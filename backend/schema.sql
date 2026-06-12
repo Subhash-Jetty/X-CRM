@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
     opened_count INTEGER DEFAULT 0,
     read_count INTEGER DEFAULT 0,
     clicked_count INTEGER DEFAULT 0,
+    converted_count INTEGER DEFAULT 0,
     scheduled_at TIMESTAMP,
     sent_at TIMESTAMP,
     completed_at TIMESTAMP,
@@ -86,6 +87,7 @@ CREATE TABLE IF NOT EXISTS communications (
     opened_at TIMESTAMP,
     read_at TIMESTAMP,
     clicked_at TIMESTAMP,
+    converted_at TIMESTAMP,
     error_message TEXT,
     created_at TIMESTAMP DEFAULT NOW()
 );

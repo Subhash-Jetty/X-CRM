@@ -20,7 +20,7 @@ from app.services.segmentation import (
     preview_segment,
     evaluate_segment_rules,
 )
-from app.services.campaign_engine import get_campaign_stats
+from app.services.campaign_engine import send_campaign, get_campaign_stats
 
 router = APIRouter()
 
@@ -113,6 +113,17 @@ async def execute_tool_call(db: AsyncSession, tool_name: str, arguments: dict) -
             return stats
         except ValueError:
             return {"error": "Campaign not found"}
+
+    elif tool_name == "send_campaign":
+        try:
+            count = await send_campaign(db, arguments["campaign_id"])
+            return {
+                "status": "sent",
+                "recipients": count,
+                "message": f"Campaign sent to {count} recipients. Delivery receipts will arrive shortly.",
+            }
+        except ValueError as e:
+            return {"error": str(e)}
 
     elif tool_name == "get_insights":
         context = await get_db_context(db)

@@ -134,6 +134,7 @@ class CampaignResponse(BaseModel):
     opened_count: int
     read_count: int
     clicked_count: int
+    converted_count: int
     scheduled_at: Optional[datetime]
     sent_at: Optional[datetime]
     completed_at: Optional[datetime]
@@ -150,9 +151,11 @@ class CampaignStats(BaseModel):
     opened: int
     read: int
     clicked: int
+    converted: int
     delivery_rate: float
     open_rate: float
     click_rate: float
+    conversion_rate: float
 
 
 # ──────────────────────────────────────────────
@@ -172,6 +175,7 @@ class CommunicationResponse(BaseModel):
     opened_at: Optional[datetime]
     read_at: Optional[datetime]
     clicked_at: Optional[datetime]
+    converted_at: Optional[datetime]
     error_message: Optional[str]
     created_at: datetime
 
@@ -181,7 +185,7 @@ class CommunicationResponse(BaseModel):
 class DeliveryReceipt(BaseModel):
     """Callback from the channel service."""
     communication_id: UUID
-    status: str  # delivered, failed, opened, read, clicked
+    status: str  # delivered, failed, opened, read, clicked, converted
     timestamp: datetime
     error_message: Optional[str] = None
 

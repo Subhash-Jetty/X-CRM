@@ -107,6 +107,7 @@ class Campaign(Base):
     opened_count = Column(Integer, default=0)
     read_count = Column(Integer, default=0)
     clicked_count = Column(Integer, default=0)
+    converted_count = Column(Integer, default=0)
     scheduled_at = Column(DateTime)
     sent_at = Column(DateTime)
     completed_at = Column(DateTime)
@@ -132,6 +133,7 @@ class Communication(Base):
     opened_at = Column(DateTime)
     read_at = Column(DateTime)
     clicked_at = Column(DateTime)
+    converted_at = Column(DateTime)
     error_message = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 

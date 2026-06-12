@@ -1,18 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { fetchApi } from "@/lib/api";
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadCampaigns();
-  }, []);
-
-  const loadCampaigns = async () => {
+  const loadCampaigns = useCallback(async (showLoader = true) => {
+    if (showLoader) setLoading(true);
     try {
       const data = await fetchApi("/campaigns");
 
@@ -33,6 +31,38 @@ export default function CampaignsPage() {
       console.error("Failed to load campaigns:", error);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCampaigns();
+  }, [loadCampaigns]);
+
+  // Auto-refresh polling: every 5 seconds when any campaign is actively processing
+  useEffect(() => {
+    const hasActiveCampaigns = campaigns.some(
+      (c) => c.status === "sending" || c.status === "sent"
+    );
+    if (!hasActiveCampaigns) return;
+
+    const interval = setInterval(() => {
+      loadCampaigns(false); // Silent refresh (no loading spinner)
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [campaigns, loadCampaigns]);
+
+  const handleSendCampaign = async (campaignId: string) => {
+    if (!confirm("Send this campaign to all segment members?")) return;
+    setSendingId(campaignId);
+    try {
+      await fetchApi(`/campaigns/${campaignId}/send`, { method: "POST" });
+      await loadCampaigns(false);
+    } catch (error: any) {
+      console.error("Failed to send campaign:", error);
+      alert(error.message || "Failed to send campaign");
+    } finally {
+      setSendingId(null);
     }
   };
 
@@ -67,13 +97,25 @@ export default function CampaignsPage() {
     }
   };
 
+  const getStatusBadge = (status: string) => {
+    const map: Record<string, { cls: string; label: string }> = {
+      draft: { cls: "badge-warning", label: "DRAFT" },
+      sending: { cls: "badge-secondary", label: "SENDING" },
+      sent: { cls: "badge-secondary", label: "SENT" },
+      completed: { cls: "badge-success", label: "COMPLETED" },
+      failed: { cls: "badge-danger", label: "FAILED" },
+    };
+    const s = map[status] || { cls: "badge-neutral", label: status.toUpperCase() };
+    return <span className={`badge ${s.cls}`}>{s.label}</span>;
+  };
+
   return (
     <div className="animate-fade-in">
       {/* Page Header */}
       <div className="page-header">
         <div className="page-header-left">
           <h1>Campaigns</h1>
-          <p className="subtitle">Track message delivery and customer engagement.</p>
+          <p className="subtitle">Track message delivery, engagement, and conversions.</p>
         </div>
         <Link href="/chat" className="btn btn-primary">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -98,7 +140,7 @@ export default function CampaignsPage() {
               </div>
               <div className="skeleton skeleton-line" style={{ width: "100%", height: 6, marginTop: 24 }} />
               <div className="campaign-stats-row">
-                {Array.from({ length: 4 }).map((_, s) => (
+                {Array.from({ length: 5 }).map((_, s) => (
                   <div key={s} className="campaign-stat">
                     <div className="skeleton skeleton-line" style={{ width: 32, height: 24, margin: "0 auto 8px" }} />
                     <div className="skeleton skeleton-line" style={{ width: 48, height: 12, margin: "0 auto" }} />
@@ -133,10 +175,10 @@ export default function CampaignsPage() {
             const deliveryRate = c.stats?.delivery_rate || 0;
             const openRate = c.stats?.open_rate || 0;
             const clickRate = c.stats?.click_rate || 0;
+            const conversionRate = c.stats?.conversion_rate || 0;
+            const isDraft = c.status === "draft" || c.status === "scheduled";
+            const isSending = sendingId === c.id;
 
-            const isSuccess = c.status === "completed";
-            const isWarning = c.status === "in_progress" || c.status === "draft";
-            
             return (
               <div key={c.id} className="campaign-card">
                 <div className="campaign-header">
@@ -147,51 +189,107 @@ export default function CampaignsPage() {
                       <span style={{ textTransform: "capitalize" }}>
                         {c.channel}
                       </span>
+                      {c.sent_at && (
+                        <span style={{ color: "var(--text-muted)", marginLeft: 8, fontSize: 12 }}>
+                          · {new Date(c.sent_at).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <span
-                    className={`badge badge-${
-                      isSuccess ? "success" : isWarning ? "warning" : "danger"
-                    }`}
+                  {getStatusBadge(c.status)}
+                </div>
+
+                {/* Send Button for Drafts */}
+                {isDraft && (
+                  <button
+                    className="btn btn-primary"
+                    style={{ width: "100%", marginTop: 16 }}
+                    onClick={() => handleSendCampaign(c.id)}
+                    disabled={isSending}
                   >
-                    {c.status.toUpperCase()}
-                  </span>
-                </div>
+                    {isSending ? (
+                      <>
+                        <span className="auth-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M22 2L11 13" />
+                          <path d="M22 2L15 22l-4-9-9-4 20-7z" />
+                        </svg>
+                        Send Campaign
+                      </>
+                    )}
+                  </button>
+                )}
 
-                <div style={{ marginTop: 24, marginBottom: 8, display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                  <span style={{ color: "var(--text-muted)" }}>Delivery Progress</span>
-                  <span style={{ fontWeight: 500, color: "var(--primary-light)" }}>{deliveryRate}%</span>
-                </div>
-                <div className="progress-bar">
-                  <div
-                    className="progress-bar-fill"
-                    style={{ width: `${deliveryRate}%` }}
-                  />
-                </div>
+                {/* Delivery Progress Bar */}
+                {!isDraft && (
+                  <>
+                    <div style={{ marginTop: 24, marginBottom: 8, display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                      <span style={{ color: "var(--text-muted)" }}>Delivery Progress</span>
+                      <span style={{ fontWeight: 500, color: "var(--primary-light)" }}>{deliveryRate}%</span>
+                    </div>
+                    <div className="progress-bar">
+                      <div
+                        className="progress-bar-fill"
+                        style={{ width: `${deliveryRate}%` }}
+                      />
+                    </div>
+                  </>
+                )}
 
-                <div className="campaign-stats-row">
-                  <div className="campaign-stat">
-                    <div className="campaign-stat-value">{c.sent_count}</div>
-                    <div className="campaign-stat-label">Sent</div>
+                {/* Stats Row */}
+                {!isDraft && (
+                  <div className="campaign-stats-row">
+                    <div className="campaign-stat">
+                      <div className="campaign-stat-value">{c.total_recipients || c.sent_count || 0}</div>
+                      <div className="campaign-stat-label">Sent</div>
+                    </div>
+                    <div className="campaign-stat">
+                      <div className="campaign-stat-value">{deliveryRate}%</div>
+                      <div className="campaign-stat-label">Delivered</div>
+                    </div>
+                    <div className="campaign-stat">
+                      <div className="campaign-stat-value">{openRate}%</div>
+                      <div className="campaign-stat-label">Opened</div>
+                    </div>
+                    <div className="campaign-stat">
+                      <div className="campaign-stat-value">{clickRate}%</div>
+                      <div className="campaign-stat-label">Clicked</div>
+                    </div>
+                    <div className="campaign-stat">
+                      <div className="campaign-stat-value" style={{ color: conversionRate > 0 ? "var(--success)" : undefined }}>
+                        {conversionRate}%
+                      </div>
+                      <div className="campaign-stat-label">Converted</div>
+                    </div>
                   </div>
-                  <div className="campaign-stat">
-                    <div className="campaign-stat-value">{deliveryRate}%</div>
-                    <div className="campaign-stat-label">Delivered</div>
+                )}
+
+                {/* Failed count if any */}
+                {c.failed_count > 0 && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "var(--danger)", display: "flex", alignItems: "center", gap: 4 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+                    </svg>
+                    {c.failed_count} failed
                   </div>
-                  <div className="campaign-stat">
-                    <div className="campaign-stat-value">{openRate}%</div>
-                    <div className="campaign-stat-label">Opened</div>
-                  </div>
-                  <div className="campaign-stat">
-                    <div className="campaign-stat-value">{clickRate}%</div>
-                    <div className="campaign-stat-label">Clicked</div>
-                  </div>
-                </div>
+                )}
               </div>
             );
           })
         )}
       </div>
+
+      {/* Auto-refresh indicator */}
+      {campaigns.some((c) => c.status === "sending" || c.status === "sent") && (
+        <div style={{ textAlign: "center", padding: "16px 0", color: "var(--text-muted)", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)", animation: "pulse 2s ease-in-out infinite" }} />
+          Live updating — delivery receipts arriving from channel service
+        </div>
+      )}
     </div>
   );
 }

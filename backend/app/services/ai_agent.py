@@ -50,10 +50,13 @@ You have access to these tools to help the marketer:
 4. **create_campaign** — Create a campaign targeting a segment.
    Parameters: name (str), segment_id (str), message_template (str), channel (str)
 
-5. **get_campaign_stats** — Get performance stats for a campaign.
+5. **send_campaign** — Send a campaign that's been created. This dispatches all communications to the channel service.
    Parameters: campaign_id (str)
 
-6. **get_insights** — Get general business insights and suggestions.
+6. **get_campaign_stats** — Get performance stats for a campaign.
+   Parameters: campaign_id (str)
+
+7. **get_insights** — Get general business insights and suggestions.
    Parameters: none
 
 ## Rules
@@ -64,6 +67,8 @@ You have access to these tools to help the marketer:
 - Provide data-driven recommendations when possible.
 - For channels: WhatsApp has highest engagement, Email is cheapest, SMS is direct, RCS is richest.
 - Always respond in a structured, easy-to-read format.
+- After creating a campaign, always offer to send it immediately.
+- When showing stats, always include the conversion rate (orders attributed to the campaign).
 """
 
 TOOL_DEFINITIONS = [
@@ -179,8 +184,21 @@ TOOL_DEFINITIONS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_campaign",
+            "description": "Send/dispatch a campaign that has been created. This sends all communications to the audience via the channel service.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "campaign_id": {"type": "string", "description": "UUID of the campaign to send"}
+                },
+                "required": ["campaign_id"]
+            }
+        }
+    },
 ]
-
 
 async def chat_with_ai(
     message: str,

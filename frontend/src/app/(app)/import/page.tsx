@@ -1,31 +1,132 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { fetchApi } from "@/lib/api";
 
 export default function ImportPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const [progress, setProgress] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    setStatus("idle");
+    setProgress("Reading file...");
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      // Detect file type: customers or orders
+      if (data.customers && Array.isArray(data.customers)) {
+        setProgress(`Uploading ${data.customers.length} customers...`);
+        const result = await fetchApi("/customers/ingest", {
+          method: "POST",
+          body: JSON.stringify({ customers: data.customers }),
+        });
+        setStatus("success");
+        setMessage(result.message || `Successfully ingested ${data.customers.length} customers`);
+      } else if (data.orders && Array.isArray(data.orders)) {
+        // Chunk orders to avoid request size limits
+        const chunkSize = 500;
+        const orders = data.orders;
+        let totalIngested = 0;
+
+        for (let i = 0; i < orders.length; i += chunkSize) {
+          const chunk = orders.slice(i, i + chunkSize);
+          setProgress(`Uploading orders: ${Math.min(i + chunkSize, orders.length)}/${orders.length}...`);
+          const result = await fetchApi("/orders/ingest", {
+            method: "POST",
+            body: JSON.stringify({ orders: chunk }),
+          });
+          totalIngested += result.count || chunk.length;
+        }
+
+        setStatus("success");
+        setMessage(`Successfully ingested ${totalIngested} orders and updated customer aggregates`);
+      } else if (Array.isArray(data)) {
+        // Try to detect if it's a flat array of customers or orders
+        const sample = data[0];
+        if (sample && ("amount" in sample || "items" in sample || "order_number" in sample)) {
+          setProgress(`Uploading ${data.length} orders...`);
+          const chunkSize = 500;
+          let totalIngested = 0;
+          for (let i = 0; i < data.length; i += chunkSize) {
+            const chunk = data.slice(i, i + chunkSize);
+            setProgress(`Uploading orders: ${Math.min(i + chunkSize, data.length)}/${data.length}...`);
+            await fetchApi("/orders/ingest", {
+              method: "POST",
+              body: JSON.stringify({ orders: chunk }),
+            });
+            totalIngested += chunk.length;
+          }
+          setStatus("success");
+          setMessage(`Successfully ingested ${totalIngested} orders`);
+        } else {
+          setProgress(`Uploading ${data.length} customers...`);
+          await fetchApi("/customers/ingest", {
+            method: "POST",
+            body: JSON.stringify({ customers: data }),
+          });
+          setStatus("success");
+          setMessage(`Successfully ingested ${data.length} customers`);
+        }
+      } else {
+        throw new Error("Unrecognized JSON format. Expected { customers: [...] } or { orders: [...] }");
+      }
+    } catch (error: any) {
+      setStatus("error");
+      setMessage(error.message || "Failed to process file. Check the format and try again.");
+    } finally {
+      setLoading(false);
+      setProgress("");
+      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleSeedData = async () => {
     setLoading(true);
     setStatus("idle");
-    setMessage("Generating and uploading seed data. This may take a minute...");
+    setMessage("");
 
     try {
-      // Simulate network request for UX
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      
+      // Step 1: Generate and ingest sample customers
+      setProgress("Generating sample customer data...");
+      const sampleCustomers = generateSampleCustomers(50);
+      await fetchApi("/customers/ingest", {
+        method: "POST",
+        body: JSON.stringify({ customers: sampleCustomers }),
+      });
+
+      // Step 2: Generate and ingest sample orders
+      setProgress("Generating sample order data...");
+      // We need customer emails to link orders
+      const customersResp = await fetchApi("/customers?page_size=100");
+      const existingCustomers = customersResp.items || [];
+
+      if (existingCustomers.length > 0) {
+        const sampleOrders = generateSampleOrders(existingCustomers, 200);
+        setProgress(`Ingesting ${sampleOrders.length} orders...`);
+        await fetchApi("/orders/ingest", {
+          method: "POST",
+          body: JSON.stringify({ orders: sampleOrders }),
+        });
+      }
+
       setStatus("success");
-      setMessage(
-        "Data ingested successfully! Note: In the demo, you need to run the Python seed scripts locally."
-      );
-    } catch (error) {
+      setMessage(`Demo data loaded! ${sampleCustomers.length} customers and 200 orders ingested successfully.`);
+    } catch (error: any) {
       setStatus("error");
-      setMessage("Failed to process data. Check the server logs.");
+      setMessage(error.message || "Failed to load demo data. Make sure the backend is running.");
     } finally {
       setLoading(false);
+      setProgress("");
     }
   };
 
@@ -41,7 +142,7 @@ export default function ImportPage() {
       </div>
 
       <div className="grid-cols-2">
-        {/* Drop Zone */}
+        {/* File Upload */}
         <div className="card glass-panel-static">
           <h2 style={{ marginBottom: 8 }}>JSON Upload</h2>
           <p
@@ -51,10 +152,27 @@ export default function ImportPage() {
               fontSize: "14px",
             }}
           >
-            Upload your customers.json or orders.json files directly.
+            Upload a <code style={{ background: "var(--bg-root)", padding: "2px 6px", borderRadius: 4, fontSize: 12 }}>customers.json</code> or <code style={{ background: "var(--bg-root)", padding: "2px 6px", borderRadius: 4, fontSize: 12 }}>orders.json</code> file.
           </p>
 
-          <div className="drop-zone">
+          <div
+            className="drop-zone"
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--primary)"; }}
+            onDragLeave={(e) => { e.currentTarget.style.borderColor = ""; }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.currentTarget.style.borderColor = "";
+              const file = e.dataTransfer.files[0];
+              if (file && fileInputRef.current) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                fileInputRef.current.files = dt.files;
+                fileInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+              }
+            }}
+            style={{ cursor: "pointer" }}
+          >
             <div className="drop-zone-icon">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-light)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -63,11 +181,32 @@ export default function ImportPage() {
               </svg>
             </div>
             <p className="drop-zone-text">Click or drag JSON files to upload</p>
-            <p className="drop-zone-hint">Max file size: 50MB</p>
-            
-            <button className="btn btn-secondary" style={{ marginTop: 24 }}>
-              Select Files
-            </button>
+            <p className="drop-zone-hint">Supports customers.json and orders.json format</p>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleFileUpload}
+              style={{ display: "none" }}
+            />
+          </div>
+
+          <div style={{ marginTop: 16, fontSize: 12, color: "var(--text-muted)" }}>
+            <strong>Expected formats:</strong>
+            <pre style={{ marginTop: 8, padding: 12, background: "var(--bg-root)", borderRadius: 8, overflow: "auto", fontSize: 11, lineHeight: 1.5 }}>
+{`{ "customers": [
+    { "name": "...", "email": "...", 
+      "phone": "..." }
+  ] }
+
+{ "orders": [
+    { "customer_email": "...",
+      "amount": 500,
+      "items": [{"name":"...", "price":250, "quantity":2}],
+      "channel": "online" }
+  ] }`}
+            </pre>
           </div>
         </div>
 
@@ -82,7 +221,7 @@ export default function ImportPage() {
             }}
           >
             Populate your workspace with realistic generated data for BeanBox
-            Coffee to test the CRM features.
+            Coffee to test all CRM features.
           </p>
 
           <div style={{ padding: "32px 0", textAlign: "center" }}>
@@ -104,7 +243,7 @@ export default function ImportPage() {
               {loading ? (
                 <>
                   <span className="auth-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
-                  Processing...
+                  {progress || "Processing..."}
                 </>
               ) : (
                 "Load Demo Data"
@@ -141,4 +280,75 @@ export default function ImportPage() {
       </div>
     </div>
   );
+}
+
+// ── Sample Data Generators ──────────────────────────
+
+function generateSampleCustomers(count: number) {
+  const firstNames = ["Amit", "Priya", "Rahul", "Sneha", "Vikram", "Ananya", "Rohit", "Neha", "Arjun", "Kavya", "Sanjay", "Divya", "Karan", "Pooja", "Aditya", "Riya", "Manish", "Simran", "Nikhil", "Megha"];
+  const lastNames = ["Sharma", "Patel", "Singh", "Gupta", "Kumar", "Mehta", "Joshi", "Verma", "Reddy", "Nair", "Chopra", "Bhat", "Iyer", "Rao", "Malhotra"];
+  const tags = ["coffee-lover", "frequent-buyer", "weekend-visitor", "app-user", "loyalty-member", "new-customer", "premium"];
+  const customers = [];
+
+  for (let i = 0; i < count; i++) {
+    const first = firstNames[Math.floor(Math.random() * firstNames.length)];
+    const last = lastNames[Math.floor(Math.random() * lastNames.length)];
+    const customerTags = [];
+    for (const tag of tags) {
+      if (Math.random() < 0.3) customerTags.push(tag);
+    }
+    customers.push({
+      name: `${first} ${last}`,
+      email: `${first.toLowerCase()}.${last.toLowerCase()}${i}@example.com`,
+      phone: `+91${Math.floor(7000000000 + Math.random() * 3000000000)}`,
+      tags: customerTags,
+    });
+  }
+  return customers;
+}
+
+function generateSampleOrders(customers: any[], count: number) {
+  const items = [
+    { name: "Espresso", price: 180 },
+    { name: "Cappuccino", price: 250 },
+    { name: "Cold Brew", price: 280 },
+    { name: "Latte", price: 220 },
+    { name: "Mocha", price: 300 },
+    { name: "Americano", price: 200 },
+    { name: "Croissant", price: 150 },
+    { name: "Muffin", price: 120 },
+    { name: "Sandwich", price: 250 },
+    { name: "Cookie Pack", price: 180 },
+  ];
+  const channels = ["online", "in-store", "app"];
+  const orders = [];
+
+  for (let i = 0; i < count; i++) {
+    const customer = customers[Math.floor(Math.random() * customers.length)];
+    const numItems = 1 + Math.floor(Math.random() * 3);
+    const orderItems = [];
+    let total = 0;
+
+    for (let j = 0; j < numItems; j++) {
+      const item = items[Math.floor(Math.random() * items.length)];
+      const qty = 1 + Math.floor(Math.random() * 2);
+      orderItems.push({ name: item.name, price: item.price, quantity: qty });
+      total += item.price * qty;
+    }
+
+    // Random date in the last 90 days
+    const daysAgo = Math.floor(Math.random() * 90);
+    const date = new Date();
+    date.setDate(date.getDate() - daysAgo);
+
+    orders.push({
+      customer_email: customer.email,
+      amount: total,
+      items: orderItems,
+      channel: channels[Math.floor(Math.random() * channels.length)],
+      status: "completed",
+      created_at: date.toISOString(),
+    });
+  }
+  return orders;
 }

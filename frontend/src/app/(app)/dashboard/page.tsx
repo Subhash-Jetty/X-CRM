@@ -8,7 +8,9 @@ import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [creatingSegment, setCreatingSegment] = useState<string | null>(null);
   const user = getUser();
   const router = useRouter();
@@ -24,7 +26,30 @@ export default function DashboardPage() {
         setLoading(false);
       }
     }
+    async function loadCampaigns() {
+      try {
+        const data = await fetchApi("/campaigns");
+        // Get stats for first 4 campaigns
+        const recent = data.slice(0, 4);
+        const withStats = await Promise.all(
+          recent.map(async (c: any) => {
+            try {
+              const s = await fetchApi(`/campaigns/${c.id}/stats`);
+              return { ...c, stats: s };
+            } catch {
+              return c;
+            }
+          })
+        );
+        setCampaigns(withStats);
+      } catch (error) {
+        console.error("Failed to load campaigns:", error);
+      } finally {
+        setLoadingCampaigns(false);
+      }
+    }
     loadData();
+    loadCampaigns();
   }, []);
 
   const handleCreateSegment = async (title: string, description: string) => {
@@ -46,6 +71,15 @@ export default function DashboardPage() {
   };
 
   const greeting = getGreeting();
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "completed": return "var(--success)";
+      case "sending": case "sent": return "var(--primary-light)";
+      case "draft": return "var(--text-muted)";
+      default: return "var(--text-muted)";
+    }
+  };
 
   return (
     <div className="animate-fade-in">
@@ -143,20 +177,16 @@ export default function DashboardPage() {
           <div className="stat-card">
             <div className="stat-icon" style={{ background: "var(--accent-glow)" }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                <line x1="8" y1="21" x2="16" y2="21" />
-                <line x1="12" y1="17" x2="12" y2="21" />
+                <path d="M22 2L11 13" />
+                <path d="M22 2L15 22l-4-9-9-4 20-7z" />
               </svg>
             </div>
             <div className="stat-info">
-              <div className="stat-label">Total Orders</div>
+              <div className="stat-label">Campaigns</div>
               <div className="stat-value">
-                {stats?.total_orders?.toLocaleString() || "5,000"}
+                {campaigns.length || "0"}
               </div>
-              <div className="stat-change positive">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15" /></svg>
-                Tracked
-              </div>
+              <div className="stat-change neutral">Total</div>
             </div>
           </div>
         </div>
@@ -225,12 +255,12 @@ export default function DashboardPage() {
                 <span className="badge badge-warning">High Priority</span>
               </div>
               <p className="suggestion-body">
-                145 previously active customers haven&apos;t ordered in 30+ days. Win them back with a personalized offer.
+                Previously active customers who haven&apos;t ordered in 30+ days. Win them back with a personalized offer.
               </p>
-              <button 
-                className="btn btn-secondary btn-sm" 
+              <button
+                className="btn btn-secondary btn-sm"
                 style={{ width: "100%" }}
-                onClick={() => handleCreateSegment("At-Risk Churners", "145 previously active customers haven't ordered in 30+ days. Win them back with a personalized offer.")}
+                onClick={() => handleCreateSegment("At-Risk Churners", "Customers with 2+ orders who haven't ordered in 30+ days")}
                 disabled={creatingSegment === "At-Risk Churners"}
               >
                 {creatingSegment === "At-Risk Churners" ? "Creating Segment..." : "Ask AI to create segment"}
@@ -243,12 +273,12 @@ export default function DashboardPage() {
                 <span className="badge badge-success">Opportunity</span>
               </div>
               <p className="suggestion-body">
-                42 customers crossed the &#8377;10,000 spend threshold this week. Reward their loyalty.
+                Customers who crossed the &#8377;10,000 spend threshold. Reward their loyalty.
               </p>
-              <button 
-                className="btn btn-secondary btn-sm" 
+              <button
+                className="btn btn-secondary btn-sm"
                 style={{ width: "100%" }}
-                onClick={() => handleCreateSegment("New VIP Customers", "42 customers crossed the ₹10,000 spend threshold this week. Reward their loyalty.")}
+                onClick={() => handleCreateSegment("New VIP Customers", "Customers who spent more than ₹10,000 total")}
                 disabled={creatingSegment === "New VIP Customers"}
               >
                 {creatingSegment === "New VIP Customers" ? "Creating Segment..." : "Ask AI to create segment"}
@@ -257,6 +287,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Recent Campaigns — now fetched from API */}
         <div className="card glass-panel-static" style={{ display: "flex", flexDirection: "column" }}>
           <h2>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "middle", marginRight: 8 }}>
@@ -265,19 +296,71 @@ export default function DashboardPage() {
             </svg>
             Recent Campaigns
           </h2>
-          <div className="empty-state" style={{ padding: "40px 24px" }}>
-            <div className="empty-state-icon">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary-light)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 2L11 13" />
-                <path d="M22 2L15 22l-4-9-9-4 20-7z" />
-              </svg>
+
+          {loadingCampaigns ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {[1, 2].map((i) => (
+                <div key={i} style={{ padding: "16px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-default)" }}>
+                  <div className="skeleton skeleton-line skeleton-line-medium" style={{ marginBottom: 8 }} />
+                  <div className="skeleton skeleton-line skeleton-line-short" />
+                </div>
+              ))}
             </div>
-            <h3>No campaigns yet</h3>
-            <p>Ask the AI assistant to create your first campaign.</p>
-            <Link href="/chat" className="btn btn-primary btn-sm">
-              Launch a campaign
-            </Link>
-          </div>
+          ) : campaigns.length === 0 ? (
+            <div className="empty-state" style={{ padding: "40px 24px" }}>
+              <div className="empty-state-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary-light)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 2L11 13" />
+                  <path d="M22 2L15 22l-4-9-9-4 20-7z" />
+                </svg>
+              </div>
+              <h3>No campaigns yet</h3>
+              <p>Ask the AI assistant to create your first campaign.</p>
+              <Link href="/chat" className="btn btn-primary btn-sm">
+                Launch a campaign
+              </Link>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {campaigns.map((c) => (
+                <div
+                  key={c.id}
+                  style={{
+                    padding: "16px",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--border-default)",
+                    background: "var(--bg-card)",
+                    cursor: "pointer",
+                    transition: "border-color 0.2s",
+                  }}
+                  onClick={() => router.push("/campaigns")}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text-main)" }}>{c.name}</span>
+                    <span
+                      className={`badge ${c.status === "completed" ? "badge-success" : c.status === "draft" ? "badge-warning" : "badge-secondary"}`}
+                      style={{ fontSize: 10 }}
+                    >
+                      {c.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--text-muted)" }}>
+                    <span style={{ textTransform: "capitalize" }}>{c.channel}</span>
+                    {c.total_recipients > 0 && <span>{c.total_recipients} recipients</span>}
+                    {c.stats?.delivery_rate > 0 && (
+                      <span style={{ color: "var(--success)" }}>{c.stats.delivery_rate}% delivered</span>
+                    )}
+                    {c.stats?.conversion_rate > 0 && (
+                      <span style={{ color: "var(--primary-light)" }}>{c.stats.conversion_rate}% converted</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <Link href="/campaigns" className="btn btn-secondary btn-sm" style={{ alignSelf: "center", marginTop: 4 }}>
+                View All Campaigns
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </div>

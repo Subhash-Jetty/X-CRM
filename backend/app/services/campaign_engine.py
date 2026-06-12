@@ -136,8 +136,10 @@ async def get_campaign_stats(db: AsyncSession, campaign_id: UUID) -> dict:
         "opened": campaign.opened_count,
         "read": campaign.read_count,
         "clicked": campaign.clicked_count,
+        "converted": campaign.converted_count or 0,
         "delivery_rate": round(campaign.delivered_count / total * 100, 1) if total else 0,
         "open_rate": round(campaign.opened_count / total * 100, 1) if total else 0,
         "click_rate": round(campaign.clicked_count / total * 100, 1) if total else 0,
+        "conversion_rate": round((campaign.converted_count or 0) / total * 100, 1) if total else 0,
         "sent_at": campaign.sent_at.isoformat() if campaign.sent_at else None,
     }

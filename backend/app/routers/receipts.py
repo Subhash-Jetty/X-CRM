@@ -22,6 +22,7 @@ STATUS_ORDER = {
     "opened": 3,
     "read": 4,
     "clicked": 5,
+    "converted": 6,
 }
 
 
@@ -83,6 +84,8 @@ async def process_receipt(db: AsyncSession, receipt: DeliveryReceipt):
         comm.read_at = timestamp
     elif receipt.status == "clicked":
         comm.clicked_at = timestamp
+    elif receipt.status == "converted":
+        comm.converted_at = timestamp
 
     # Update campaign counters
     campaign_id = comm.campaign_id
@@ -99,6 +102,7 @@ async def process_receipt(db: AsyncSession, receipt: DeliveryReceipt):
             "opened": "opened_count",
             "read": "read_count",
             "clicked": "clicked_count",
+            "converted": "converted_count",
         }
         counter = counter_map.get(receipt.status)
         if counter:
