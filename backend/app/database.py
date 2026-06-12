@@ -19,7 +19,8 @@ engine = create_async_engine(
     max_overflow=10,
     pool_pre_ping=True,
     connect_args={
-        "prepared_statement_cache_size": 0,  # Required for Supabase Supavisor pooler
+        "prepared_statement_cache_size": 0,  # For SQLAlchemy
+        "statement_cache_size": 0,           # For asyncpg
     },
 )
 
