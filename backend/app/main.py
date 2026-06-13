@@ -25,19 +25,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow frontend origins (dynamic for production)
-_cors_origins = [
-    settings.FRONTEND_URL,
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-# Deduplicate while preserving order
-_cors_origins = list(dict.fromkeys(_cors_origins))
-
+# CORS — allow all origins for deployed demo (no cookie auth used)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
