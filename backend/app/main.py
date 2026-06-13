@@ -2,7 +2,7 @@
 XENO CRM Backend — FastAPI Application
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
@@ -24,6 +24,19 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Custom middleware to handle OPTIONS preflight requests blindly
+@app.middleware("http")
+async def handle_options_request(request: Request, call_next):
+    if request.method == "OPTIONS":
+        response = Response(status_code=200)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "*"
+        # Echo the requested headers or fallback to *
+        req_headers = request.headers.get("Access-Control-Request-Headers", "*")
+        response.headers["Access-Control-Allow-Headers"] = req_headers
+        return response
+    return await call_next(request)
 
 # CORS — allow all origins for deployed demo (no cookie auth used)
 app.add_middleware(
