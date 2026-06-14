@@ -131,84 +131,98 @@ export default function DashboardPage() {
         <div className="grid-cols-4 stagger-children" style={{ marginBottom: 32 }}>
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="stat-card">
-              <div className="skeleton skeleton-circle" style={{ width: 48, height: 48, borderRadius: 12 }} />
-              <div className="stat-info">
-                <div className="skeleton skeleton-line skeleton-line-short" style={{ marginBottom: 10 }} />
-                <div className="skeleton skeleton-line skeleton-line-medium" style={{ height: 24 }} />
+              <div className="stat-header">
+                <div className="skeleton skeleton-circle" style={{ width: 40, height: 40, borderRadius: 10 }} />
+                <div className="skeleton skeleton-line skeleton-line-short" />
               </div>
+              <div className="skeleton skeleton-line skeleton-line-medium" style={{ height: 36, marginTop: 16 }} />
             </div>
           ))}
         </div>
       ) : (
         <div className="grid-cols-4 stagger-children" style={{ marginBottom: 32 }}>
           <div className="stat-card">
-            <div className="stat-icon" style={{ background: "var(--primary-glow)" }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-light)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            </div>
-            <div className="stat-info">
+            <div className="stat-header">
+              <div className="stat-icon" style={{ background: "var(--primary-glow)", color: "var(--primary-light)" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </div>
               <div className="stat-label">Total Customers</div>
-              <div className="stat-value">
-                {stats?.total_customers?.toLocaleString() || "0"}
-              </div>
-              <div className="stat-change positive">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15" /></svg>
-                Active
-              </div>
+            </div>
+            <div className="stat-value">
+              {stats?.total_customers?.toLocaleString() || "0"}
+            </div>
+            <div className="stat-change positive">
+              <span className="stat-change-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15" /></svg>
+              </span>
+              Active Base
             </div>
           </div>
 
           <div className="stat-card">
-            <div className="stat-icon" style={{ background: "var(--success-glow)" }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="1" x2="12" y2="23" />
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
-            </div>
-            <div className="stat-info">
+            <div className="stat-header">
+              <div className="stat-icon" style={{ background: "var(--success-glow)", color: "var(--success)" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="1" x2="12" y2="23" />
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+              </div>
               <div className="stat-label">Total Revenue</div>
-              <div className="stat-value" style={{ color: "var(--success)" }}>
-                &#8377;{stats?.total_revenue?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || "0"}
-              </div>
-              <div className="stat-change positive">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15" /></svg>
-                Growing
-              </div>
+            </div>
+            <div className="stat-value" style={{ color: "var(--success)" }}>
+              &#8377;{stats?.total_revenue?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || "0"}
+            </div>
+            <div className="stat-change positive">
+              <span className="stat-change-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15" /></svg>
+              </span>
+              Growing
             </div>
           </div>
 
           <div className="stat-card">
-            <div className="stat-icon" style={{ background: "var(--secondary-glow)" }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--secondary-light)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-              </svg>
-            </div>
-            <div className="stat-info">
+            <div className="stat-header">
+              <div className="stat-icon" style={{ background: "var(--secondary-glow)", color: "var(--secondary-light)" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                </svg>
+              </div>
               <div className="stat-label">Avg Order Value</div>
-              <div className="stat-value">
-                &#8377;{stats?.avg_order_value?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || "0"}
-              </div>
-              <div className="stat-change neutral">Lifetime</div>
+            </div>
+            <div className="stat-value">
+              &#8377;{stats?.avg_order_value?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || "0"}
+            </div>
+            <div className="stat-change neutral">
+              <span className="stat-change-icon" style={{ opacity: 0.5 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </span>
+              Lifetime Avg
             </div>
           </div>
 
           <div className="stat-card">
-            <div className="stat-icon" style={{ background: "var(--accent-glow)" }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 2L11 13" />
-                <path d="M22 2L15 22l-4-9-9-4 20-7z" />
-              </svg>
-            </div>
-            <div className="stat-info">
-              <div className="stat-label">Campaigns</div>
-              <div className="stat-value">
-                {campaigns.length || "0"}
+            <div className="stat-header">
+              <div className="stat-icon" style={{ background: "var(--accent-glow)", color: "var(--accent)" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 2L11 13" />
+                  <path d="M22 2L15 22l-4-9-9-4 20-7z" />
+                </svg>
               </div>
-              <div className="stat-change neutral">Total</div>
+              <div className="stat-label">Total Campaigns</div>
+            </div>
+            <div className="stat-value">
+              {campaigns.length || "0"}
+            </div>
+            <div className="stat-change neutral">
+              <span className="stat-change-icon" style={{ opacity: 0.5 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+              </span>
+              Active Overview
             </div>
           </div>
         </div>
