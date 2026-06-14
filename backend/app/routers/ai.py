@@ -144,7 +144,7 @@ async def ensure_high_value_segment(db: AsyncSession) -> Segment:
         .where(func.lower(Segment.name).in_(["high-value customers", "high value customers", "vip customers"]))
         .order_by(Segment.created_at.desc())
     )
-    existing_segment = existing_result.scalar_one_or_none()
+    existing_segment = existing_result.scalars().first()
     if existing_segment:
         return existing_segment
 
@@ -169,7 +169,7 @@ async def launch_campaign_from_chat(db: AsyncSession, message: str) -> tuple[str
         .where(Campaign.status.in_(["draft", "scheduled"]))
         .order_by(Campaign.created_at.desc())
     )
-    campaign = draft_result.scalar_one_or_none()
+    campaign = draft_result.scalars().first()
 
     actions_taken = []
 
@@ -513,7 +513,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 existing_result = await db.execute(
                     select(Segment).where(func.lower(Segment.name) == segment_name.lower())
                 )
-                existing_segment = existing_result.scalar_one_or_none()
+                existing_segment = existing_result.scalars().first()
 
                 if existing_segment:
                     reply_text = (
