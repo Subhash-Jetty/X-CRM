@@ -37,8 +37,10 @@ export default function LandingPage() {
           30
         );
       } else {
-        setDeleting(false);
-        setWordIndex((i) => (i + 1) % TYPED_WORDS.length);
+        timeout = setTimeout(() => {
+          setDeleting(false);
+          setWordIndex((i) => (i + 1) % TYPED_WORDS.length);
+        }, 30);
       }
     }
 

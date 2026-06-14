@@ -6,9 +6,36 @@ import { fetchApi } from "@/lib/api";
 import { getUser, getGreeting } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
+type DashboardStats = {
+  total_customers?: number;
+  total_revenue?: number;
+  avg_order_value?: number;
+};
+
+type SegmentRule = {
+  field: string;
+  operator: string;
+  value: string | number;
+};
+
+type CampaignStats = {
+  delivery_rate?: number;
+  conversion_rate?: number;
+};
+
+type Campaign = {
+  id: string;
+  name: string;
+  channel: string;
+  status: string;
+  total_recipients?: number;
+  sent_at?: string | null;
+  stats?: CampaignStats;
+};
+
 export default function DashboardPage() {
-  const [stats, setStats] = useState<any>(null);
-  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [creatingSegment, setCreatingSegment] = useState<string | null>(null);
@@ -18,7 +45,7 @@ export default function DashboardPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const data = await fetchApi("/customers/stats");
+        const data = (await fetchApi("/customers/stats")) as DashboardStats;
         setStats(data);
       } catch (error) {
         console.error("Failed to load stats:", error);
@@ -28,13 +55,13 @@ export default function DashboardPage() {
     }
     async function loadCampaigns() {
       try {
-        const data = await fetchApi("/campaigns");
+        const data = (await fetchApi("/campaigns")) as Campaign[];
         // Get stats for first 4 campaigns
         const recent = data.slice(0, 4);
         const withStats = await Promise.all(
-          recent.map(async (c: any) => {
+          recent.map(async (c) => {
             try {
-              const s = await fetchApi(`/campaigns/${c.id}/stats`);
+              const s = (await fetchApi(`/campaigns/${c.id}/stats`)) as CampaignStats;
               return { ...c, stats: s };
             } catch {
               return c;
@@ -52,13 +79,17 @@ export default function DashboardPage() {
     loadCampaigns();
   }, []);
 
-  const handleCreateSegment = async (title: string, description: string) => {
+  const handleCreateSegment = async (title: string, description: string, rules: SegmentRule[]) => {
     setCreatingSegment(title);
     try {
-      await fetchApi("/ai/chat", {
+      await fetchApi("/segments", {
         method: "POST",
         body: JSON.stringify({
-          message: `Please create a segment for ${title}. Criteria: ${description}`
+          name: title,
+          description,
+          rules,
+          natural_language_query: description,
+          is_ai_generated: true,
         })
       });
       router.push("/segments");
@@ -71,15 +102,6 @@ export default function DashboardPage() {
   };
 
   const greeting = getGreeting();
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed": return "var(--success)";
-      case "sending": case "sent": return "var(--primary-light)";
-      case "draft": return "var(--text-muted)";
-      default: return "var(--text-muted)";
-    }
-  };
 
   return (
     <div className="animate-fade-in">
@@ -260,10 +282,17 @@ export default function DashboardPage() {
               <button
                 className="btn btn-secondary btn-sm"
                 style={{ width: "100%" }}
-                onClick={() => handleCreateSegment("At-Risk Churners", "Customers with 2+ orders who haven't ordered in 30+ days")}
+                onClick={() => handleCreateSegment(
+                  "At-Risk Churners",
+                  "Customers with 2+ orders who haven't ordered in 30+ days",
+                  [
+                    { field: "order_count", operator: ">=", value: 2 },
+                    { field: "last_order_date", operator: "days_ago_gt", value: 30 },
+                  ],
+                )}
                 disabled={creatingSegment === "At-Risk Churners"}
               >
-                {creatingSegment === "At-Risk Churners" ? "Creating Segment..." : "Ask AI to create segment"}
+                {creatingSegment === "At-Risk Churners" ? "Creating Segment..." : "Create Segment"}
               </button>
             </div>
 
@@ -278,10 +307,14 @@ export default function DashboardPage() {
               <button
                 className="btn btn-secondary btn-sm"
                 style={{ width: "100%" }}
-                onClick={() => handleCreateSegment("New VIP Customers", "Customers who spent more than ₹10,000 total")}
+                onClick={() => handleCreateSegment(
+                  "New VIP Customers",
+                  "Customers who spent more than Rs.10,000 total",
+                  [{ field: "total_spend", operator: ">", value: 10000 }],
+                )}
                 disabled={creatingSegment === "New VIP Customers"}
               >
-                {creatingSegment === "New VIP Customers" ? "Creating Segment..." : "Ask AI to create segment"}
+                {creatingSegment === "New VIP Customers" ? "Creating Segment..." : "Create Segment"}
               </button>
             </div>
           </div>
@@ -346,12 +379,12 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--text-muted)" }}>
                     <span style={{ textTransform: "capitalize" }}>{c.channel}</span>
-                    {c.total_recipients > 0 && <span>{c.total_recipients} recipients</span>}
-                    {c.stats?.delivery_rate > 0 && (
-                      <span style={{ color: "var(--success)" }}>{c.stats.delivery_rate}% delivered</span>
+                    {(c.total_recipients || 0) > 0 && <span>{c.total_recipients} recipients</span>}
+                    {(c.stats?.delivery_rate || 0) > 0 && (
+                      <span style={{ color: "var(--success)" }}>{c.stats?.delivery_rate || 0}% delivered</span>
                     )}
-                    {c.stats?.conversion_rate > 0 && (
-                      <span style={{ color: "var(--primary-light)" }}>{c.stats.conversion_rate}% converted</span>
+                    {(c.stats?.conversion_rate || 0) > 0 && (
+                      <span style={{ color: "var(--primary-light)" }}>{c.stats?.conversion_rate || 0}% converted</span>
                     )}
                   </div>
                 </div>

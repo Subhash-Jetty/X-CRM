@@ -6,6 +6,41 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+async def post_receipts_with_retry(
+    client: httpx.AsyncClient,
+    callback_url: str,
+    receipts: list[dict],
+    label: str,
+    max_attempts: int = 3,
+) -> bool:
+    """POST receipt callbacks with bounded exponential backoff."""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = await client.post(callback_url, json={"receipts": receipts})
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            if attempt == max_attempts:
+                logger.error(
+                    "Failed to send %s callbacks to %s after %s attempts: %s",
+                    label,
+                    callback_url,
+                    max_attempts,
+                    e,
+                )
+                return False
+
+            sleep_for = 0.5 * (2 ** (attempt - 1)) + random.uniform(0, 0.25)
+            logger.warning(
+                "Retrying %s callbacks to %s after attempt %s failed: %s",
+                label,
+                callback_url,
+                attempt,
+                e,
+            )
+            await asyncio.sleep(sleep_for)
+
+
 async def simulate_delivery(communications: list[dict], callback_url: str):
     """
     Simulate the full lifecycle of a batch of communications.
@@ -36,11 +71,9 @@ async def simulate_delivery(communications: list[dict], callback_url: str):
                     "timestamp": datetime.utcnow().isoformat()
                 })
 
-        # Send first batch of receipts
-        try:
-            await client.post(callback_url, json={"receipts": receipts})
-        except Exception as e:
-            logger.error(f"Failed to send delivery callback to {callback_url}: {e}")
+        # Send first batch of receipts. Without this, later engagement callbacks
+        # would be confusing, so stop after bounded retries are exhausted.
+        if not await post_receipts_with_retry(client, callback_url, receipts, "delivery"):
             return
 
         # Track delivered for further engagement simulation
@@ -60,10 +93,7 @@ async def simulate_delivery(communications: list[dict], callback_url: str):
                 })
 
         if open_receipts:
-            try:
-                await client.post(callback_url, json={"receipts": open_receipts})
-            except Exception as e:
-                logger.error(f"Failed to send open callbacks: {e}")
+            await post_receipts_with_retry(client, callback_url, open_receipts, "open")
 
         # Step 3: Simulate Reads (70% of opened actually read the full message)
         await asyncio.sleep(random.uniform(1.0, 3.0))
@@ -79,10 +109,7 @@ async def simulate_delivery(communications: list[dict], callback_url: str):
                 })
 
         if read_receipts:
-            try:
-                await client.post(callback_url, json={"receipts": read_receipts})
-            except Exception as e:
-                logger.error(f"Failed to send read callbacks: {e}")
+            await post_receipts_with_retry(client, callback_url, read_receipts, "read")
 
         # Step 4: Simulate Clicks (30% of readers click the CTA link)
         await asyncio.sleep(random.uniform(1.0, 4.0))
@@ -98,10 +125,7 @@ async def simulate_delivery(communications: list[dict], callback_url: str):
                 })
 
         if click_receipts:
-            try:
-                await client.post(callback_url, json={"receipts": click_receipts})
-            except Exception as e:
-                logger.error(f"Failed to send click callbacks: {e}")
+            await post_receipts_with_retry(client, callback_url, click_receipts, "click")
 
         # Step 5: Simulate Conversions / Orders (20% of clickers place an order)
         # This models "order came because of this communication" — attribution tracking
@@ -116,7 +140,4 @@ async def simulate_delivery(communications: list[dict], callback_url: str):
                 })
 
         if conversion_receipts:
-            try:
-                await client.post(callback_url, json={"receipts": conversion_receipts})
-            except Exception as e:
-                logger.error(f"Failed to send conversion callbacks: {e}")
+            await post_receipts_with_retry(client, callback_url, conversion_receipts, "conversion")

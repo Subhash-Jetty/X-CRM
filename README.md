@@ -116,7 +116,7 @@ The `converted` status tracks **order attribution** — when a customer places a
 ## Local Development Setup
 
 ### Prerequisites
-- Python 3.12+
+- Python 3.12
 - Node.js 18+
 - PostgreSQL database (or Supabase account)
 
@@ -179,6 +179,8 @@ Or use the **Data Import** page in the UI to load demo data with one click.
 
 ## Deployment
 
+For a step-by-step deployment checklist, hosted env var map, seed instructions, and smoke tests, see `DEPLOYMENT.md`.
+
 ### Frontend → Vercel
 ```bash
 cd frontend
@@ -203,13 +205,46 @@ Use the `render.yaml` blueprint or deploy each Dockerfile individually. Required
 
 2. **Materialized segments:** Segment membership is pre-computed and stored in `segment_members`, enabling fast campaign dispatch without re-evaluating rules at send time.
 
-3. **Bulk operations everywhere:** Ingestion uses PostgreSQL `INSERT ... ON CONFLICT DO UPDATE` for upserts. Customer aggregates are recalculated via a single SQL `UPDATE ... FROM (subquery)` rather than N+1 queries.
+3. **Bulk ingestion with dialect awareness:** Customer/order ingestion uses database-specific upsert primitives for PostgreSQL and SQLite, while aggregate recalculation uses portable SQLAlchemy so the local demo and production database behave consistently.
 
-4. **Idempotent receipt processing:** The receipt handler uses a `STATUS_ORDER` map to prevent status regression — a communication that's already "clicked" won't go back to "delivered" if a late callback arrives.
+4. **Idempotent receipt processing:** The receipt handler accepts only forward lifecycle transitions, blocks late failures after delivery/engagement, and updates campaign counters from accepted communication state transitions so duplicate callbacks do not inflate metrics.
 
 5. **Dual-LLM fallback:** Groq is blazing fast but rate-limited. Gemini 2.5 Flash provides a seamless fallback so the AI never goes down.
 
 6. **Conversion attribution:** The channel service simulates order conversions (20% of clickers), and the CRM tracks this as a first-class status in the delivery funnel.
+
+7. **Scoped retry instead of fake infrastructure:** The channel stub uses bounded in-process callback retries with backoff. At production scale this would move to a durable queue/outbox with idempotency keys, replay tooling, and dead-letter handling.
+
+---
+
+## Scale Assumptions and Tradeoffs
+
+- Demo dataset: roughly 5,000 customers and realistic purchase history, enough to show segmentation and campaign fanout without overbuilding distributed infrastructure.
+- Campaign size: thousands of recipients per campaign, not millions. A single application instance is acceptable for the take-home demo.
+- Segment membership is materialized because campaign dispatch should not re-evaluate rules for every send.
+- Communications are inserted before channel dispatch so every recipient has an auditable row. If the channel service is unreachable, the campaign is marked `failed` and the API returns an error instead of claiming success.
+- Receipt batches preload matching communications/campaigns, apply counter deltas in memory, and flush progress every 250 accepted transitions so local SQLite demos do not stall under large callback bursts.
+- Callback retry is bounded and in-process for this scope. In production, the channel service would use a durable queue, transactional outbox, idempotency keys, worker concurrency limits, observability, and a replay/dead-letter workflow.
+- SQLite is supported for local demos; PostgreSQL/Supabase is the intended hosted database. Tags are stored as JSON arrays in both paths to avoid ORM/schema drift.
+- The AI agent confirms before persistence-heavy actions where possible. Dashboard quick segment actions use deterministic segment APIs so the UI never pretends a preview was persisted.
+
+## AI-Native Development Workflow
+
+- AI was used to accelerate architecture review, identify submission-blocking risks, and draft implementation options.
+- Generated ideas were inspected against the codebase before edits; fixes were kept small and tied to assignment requirements.
+- AI output that needed correction included false-success campaign dispatch, overly optimistic README claims, and PostgreSQL-only SQL in a SQLite local path.
+- Ownership was maintained through direct code review, focused tests, lint/build verification, and explicit tradeoff documentation.
+
+## Verification
+
+- Frontend lint: `npm.cmd run lint`
+- Frontend production build: `npm.cmd run build`
+- Python syntax check: `python -m py_compile ...`
+- Backend tests: `python -m unittest discover -s backend\tests` after creating a Python 3.12 environment and installing `backend/requirements.txt`
+
+Note: Python 3.14 is currently installed on this machine, but the backend dependency set is pinned for Python 3.12. `start.ps1` now detects a stale or missing environment and requires Python 3.12 instead of silently creating an incompatible venv.
+
+See `WALKTHROUGH.md` for the 5-6 minute video script and demo checklist.
 
 ---
 

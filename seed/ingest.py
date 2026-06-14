@@ -15,8 +15,10 @@ from app.services.ingestion import ingest_customers, ingest_orders
 from app.models import Base
 
 async def ingest_data():
-    # Make sure tables exist (they should, since user ran schema.sql, but just in case)
-    # Actually, we don't call create_all here because schema.sql handled it.
+    # Keep the local SQLite demo path self-contained. Production deployments still
+    # use schema.sql/migrations, but create_all is harmless for existing tables.
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     
     seed_dir = os.path.abspath(os.path.join(os.path.dirname(__file__)))
     print("Loading JSON files...")

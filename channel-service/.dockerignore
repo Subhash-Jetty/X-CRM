@@ -1,9 +1,11 @@
+.env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 *.pyo
-.env
-.env.*
+*.pyd
+.pytest_cache/
 venv/
-.git/
-.gitignore
-*.md
+.venv/
+.test-venv/

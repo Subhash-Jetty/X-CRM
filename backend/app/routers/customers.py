@@ -2,6 +2,7 @@
 Customer API routes — list, detail, bulk ingest.
 """
 from uuid import UUID
+import logging
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,8 @@ from app.schemas import (
 from app.services.ingestion import ingest_customers
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=PaginatedResponse)
@@ -55,12 +58,41 @@ async def list_customers(
     result = await db.execute(query)
     customers = result.scalars().all()
 
+    items_list: list[CustomerResponse] = []
+    for c in customers:
+        try:
+            data = {
+                "id": c.id,
+                "name": c.name if c.name is not None else "Unknown",
+                "email": c.email,
+                "phone": c.phone,
+                "total_spend": float(c.total_spend) if c.total_spend is not None else 0.0,
+                "order_count": int(c.order_count) if c.order_count is not None else 0,
+                "last_order_date": c.last_order_date,
+                "first_order_date": c.first_order_date,
+                "avg_order_value": float(c.avg_order_value) if c.avg_order_value is not None else 0.0,
+                "tags": c.tags or [],
+                "created_at": c.created_at,
+            }
+            items_list.append(CustomerResponse.model_validate(data))
+        except Exception as e:
+            logger.warning("Failed to validate customer %s: %s", getattr(c, "id", None), e)
+            # Best-effort fallback: include minimal fields so UI can show the row
+            items_list.append(CustomerResponse.model_validate({
+                "id": c.id,
+                "name": c.name or "Unknown",
+                "email": c.email,
+                "phone": c.phone,
+                "tags": c.tags or [],
+                "created_at": c.created_at,
+            }))
+
     return PaginatedResponse(
-        items=[CustomerResponse.model_validate(c) for c in customers],
-        total=total,
+        items=items_list,
+        total=total or 0,
         page=page,
         page_size=page_size,
-        total_pages=(total + page_size - 1) // page_size,
+        total_pages=(int(total or 0) + page_size - 1) // page_size,
     )
 
 

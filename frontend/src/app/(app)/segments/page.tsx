@@ -1,38 +1,72 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { fetchApi } from "@/lib/api";
 
+type Segment = {
+  id: string;
+  name: string;
+  description?: string | null;
+  customer_count?: number;
+  is_ai_generated?: boolean;
+};
+
+type Customer = {
+  id: string;
+  name: string;
+  email?: string | null;
+  total_spend?: number;
+};
+
+type MembersResponse = {
+  items?: Customer[];
+  total?: number;
+  page?: number;
+  page_size?: number;
+  total_pages?: number;
+};
+
 export default function SegmentsPage() {
-  const [segments, setSegments] = useState<any[]>([]);
+  const [segments, setSegments] = useState<Segment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSegmentMembers, setSelectedSegmentMembers] = useState<any[]>([]);
+  const [selectedSegmentMembers, setSelectedSegmentMembers] = useState<Customer[]>([]);
+  const [selectedSegmentMeta, setSelectedSegmentMeta] = useState({ total: 0, page: 1, page_size: 50, total_pages: 0 });
+  const [selectedSegmentName, setSelectedSegmentName] = useState<string>("");
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [loadingMembers, setLoadingMembers] = useState(false);
 
-  useEffect(() => {
-    loadSegments();
-  }, []);
-
-  const loadSegments = async () => {
+  const loadSegments = useCallback(async () => {
     try {
-      const data = await fetchApi("/segments");
+      const data = (await fetchApi("/segments")) as Segment[];
       setSegments(data || []);
     } catch (error) {
       console.error("Failed to load segments:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleViewMembers = async (segmentId: string) => {
+  useEffect(() => {
+    void Promise.resolve().then(() => loadSegments());
+  }, [loadSegments]);
+
+  const PAGE_SIZE = 50;
+
+  const fetchMembers = async (segmentId: string, page: number = 1) => {
+    if (!segmentId) return;
     setLoadingMembers(true);
-    setIsMembersModalOpen(true);
     try {
-      const data = await fetchApi(`/segments/${segmentId}/members?page_size=50`);
+      const data = (await fetchApi(`/segments/${segmentId}/members?page=${page}&page_size=${PAGE_SIZE}`)) as MembersResponse;
       setSelectedSegmentMembers(data.items || []);
+      setSelectedSegmentMeta({
+        total: data.total || 0,
+        page: data.page || page,
+        page_size: data.page_size || PAGE_SIZE,
+        total_pages: data.total_pages || (data.total ? Math.ceil(data.total / PAGE_SIZE) : 0),
+      });
     } catch (error) {
       console.error("Failed to load members:", error);
       alert("Failed to load members");
@@ -41,11 +75,26 @@ export default function SegmentsPage() {
     }
   };
 
+  const handleViewMembers = async (segmentId: string) => {
+    const seg = segments.find((s) => s.id === segmentId);
+    setSelectedSegmentName(seg?.name || "Segment Members");
+    setSelectedSegmentId(segmentId);
+    setIsMembersModalOpen(true);
+    // reset to first page
+    await fetchMembers(segmentId, 1);
+  };
+
+  const handleMembersPageChange = async (newPage: number) => {
+    if (!selectedSegmentId) return;
+    if (newPage < 1 || newPage > (selectedSegmentMeta.total_pages || 1)) return;
+    await fetchMembers(selectedSegmentId, newPage);
+  };
+
   const handleDeleteSegment = async (segmentId: string) => {
     if (!confirm("Are you sure you want to delete this segment?")) return;
     try {
       await fetchApi(`/segments/${segmentId}`, { method: "DELETE" });
-      loadSegments();
+      void loadSegments();
     } catch (error) {
       console.error("Failed to delete segment:", error);
       alert("Failed to delete segment");
@@ -174,7 +223,10 @@ export default function SegmentsPage() {
         <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div className="card glass-panel-static" style={{ width: "600px", maxHeight: "80vh", display: "flex", flexDirection: "column", padding: "24px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h2 style={{ margin: 0 }}>Segment Members</h2>
+              <div>
+                <h2 style={{ margin: 0 }}>{selectedSegmentName || "Segment Members"}</h2>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{selectedSegmentMeta.total.toLocaleString()} members</div>
+              </div>
               <button onClick={() => setIsMembersModalOpen(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
@@ -205,6 +257,16 @@ export default function SegmentsPage() {
                   </tbody>
                 </table>
               )}
+            </div>
+            {/* Pagination controls */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+              <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
+                Showing page {selectedSegmentMeta.page} of {selectedSegmentMeta.total_pages} — {selectedSegmentMeta.total.toLocaleString()} members
+              </div>
+              <div>
+                <button className="btn btn-secondary" disabled={selectedSegmentMeta.page <= 1 || loadingMembers} onClick={() => handleMembersPageChange(selectedSegmentMeta.page - 1)} style={{ marginRight: 8 }}>Prev</button>
+                <button className="btn btn-secondary" disabled={selectedSegmentMeta.page >= selectedSegmentMeta.total_pages || loadingMembers} onClick={() => handleMembersPageChange(selectedSegmentMeta.page + 1)}>Next</button>
+              </div>
             </div>
           </div>
         </div>,

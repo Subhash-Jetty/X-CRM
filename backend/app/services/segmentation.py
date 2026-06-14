@@ -36,7 +36,9 @@ def build_filter(field: str, operator: str, value):
     elif operator == "days_ago_gt":
         # "last_order_date was more than N days ago" → customers inactive for N+ days
         cutoff = datetime.utcnow() - timedelta(days=int(value))
-        return column < cutoff
+        # Treat NULL last_order_date (never ordered) as older than cutoff
+        # so they are considered inactive for this rule.
+        return or_(column.is_(None), column < cutoff)
     elif operator == "days_ago_lt":
         # "last_order_date was less than N days ago" → recently active customers
         cutoff = datetime.utcnow() - timedelta(days=int(value))
@@ -50,8 +52,8 @@ def build_filter(field: str, operator: str, value):
             return column.in_(value)
         return column.in_([value])
     elif operator == "array_contains":
-        # For ARRAY columns like tags
-        return column.any(value)
+        # Tags are stored as a JSON array for SQLite/PostgreSQL parity.
+        return column.contains([value])
     else:
         raise ValueError(f"Unknown operator: {operator}")
 

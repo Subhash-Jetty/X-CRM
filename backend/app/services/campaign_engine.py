@@ -1,26 +1,31 @@
 """
-Campaign engine — handles campaign creation, sending, and stats.
+Campaign engine: campaign creation, dispatch, personalization, and stats.
 """
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
+
 import httpx
-from sqlalchemy import select, update, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Campaign, Communication, SegmentMember, Customer, Segment
 from app.config import settings
+from app.models import Campaign, Communication, Customer, SegmentMember
+
+
+class CampaignDispatchError(RuntimeError):
+    """Raised when the CRM cannot hand a campaign batch to the channel service."""
+
+    def __init__(self, message: str, recipient_count: int = 0):
+        super().__init__(message)
+        self.recipient_count = recipient_count
 
 
 async def send_campaign(db: AsyncSession, campaign_id: UUID) -> int:
     """
-    Execute a campaign:
-    1. Get all segment members
-    2. Create a Communication record per member
-    3. Batch-send to the channel service
-    4. Update campaign status
-    Returns number of communications created.
+    Execute a campaign by creating per-recipient communication rows and handing
+    them to the separate channel service. If dispatch fails, the campaign is
+    marked failed and the caller gets an explicit error instead of false success.
     """
-    # Get campaign
     result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
     campaign = result.scalar_one_or_none()
     if not campaign:
@@ -29,52 +34,52 @@ async def send_campaign(db: AsyncSession, campaign_id: UUID) -> int:
     if campaign.status not in ("draft", "scheduled"):
         raise ValueError(f"Campaign is already {campaign.status}")
 
-    # Get segment members with customer data
     members_result = await db.execute(
         select(Customer)
         .join(SegmentMember, SegmentMember.customer_id == Customer.id)
         .where(SegmentMember.segment_id == campaign.segment_id)
     )
     customers = members_result.scalars().all()
-
     if not customers:
         raise ValueError("No customers in segment")
 
-    # Update campaign status
+    handoff_time = datetime.utcnow()
     campaign.status = "sending"
-    campaign.sent_at = datetime.utcnow()
+    campaign.sent_at = handoff_time
     campaign.total_recipients = len(customers)
 
-    # Create Communication records and prepare batch for channel service
+    communications = []
     communications_batch = []
     for customer in customers:
-        # Personalise message by replacing placeholders
         personalised = personalise_message(campaign.message_template, customer)
-
         comm = Communication(
+            id=uuid4(),
             campaign_id=campaign_id,
             customer_id=customer.id,
             channel=campaign.channel,
             personalised_message=personalised,
-            status="queued",
+            status="sent",
+            sent_at=handoff_time,
         )
         db.add(comm)
-        await db.flush()  # Get the ID
-
-        communications_batch.append({
-            "communication_id": str(comm.id),
-            "recipient": {
-                "name": customer.name,
-                "email": customer.email,
-                "phone": customer.phone,
-            },
-            "message": personalised,
-            "channel": campaign.channel,
-        })
+        communications.append(comm)
+        communications_batch.append(
+            {
+                "communication_id": str(comm.id),
+                "recipient": {
+                    "name": customer.name,
+                    "email": customer.email,
+                    "phone": customer.phone,
+                },
+                "message": personalised,
+                "channel": campaign.channel,
+            }
+        )
 
     await db.flush()
+    await db.commit()
 
-    # Send batch to channel service (fire and forget — channel will callback)
+    dispatch_error = None
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -84,31 +89,46 @@ async def send_campaign(db: AsyncSession, campaign_id: UUID) -> int:
                     "callback_url": f"{settings.BACKEND_URL}/api/receipts/batch",
                 },
             )
-            if response.status_code == 200:
-                campaign.sent_count = len(communications_batch)
-                campaign.status = "sent"
-            else:
-                campaign.status = "failed"
-    except httpx.RequestError:
-        # Channel service may be waking up (cold start) — mark as sent anyway
-        # The channel service will process when it comes online
-        campaign.sent_count = len(communications_batch)
-        campaign.status = "sent"
+        if 200 <= response.status_code < 300:
+            campaign.sent_count = len(communications_batch)
+            campaign.status = "sent"
+        else:
+            campaign.status = "failed"
+            campaign.failed_count = len(communications)
+            for comm in communications:
+                comm.status = "failed"
+                comm.failed_at = datetime.utcnow()
+                comm.error_message = f"Channel service rejected dispatch with HTTP {response.status_code}"
+            dispatch_error = (
+                f"Channel service rejected dispatch with HTTP {response.status_code}: "
+                f"{response.text[:200]}"
+            )
+    except httpx.RequestError as exc:
+        campaign.status = "failed"
+        campaign.failed_count = len(communications)
+        for comm in communications:
+            comm.status = "failed"
+            comm.failed_at = datetime.utcnow()
+            comm.error_message = f"Channel service unreachable: {exc}"
+        dispatch_error = f"Channel service unreachable: {exc}"
 
     await db.flush()
+    if dispatch_error:
+        raise CampaignDispatchError(dispatch_error, len(communications_batch))
+
     return len(communications_batch)
 
 
 def personalise_message(template: str, customer) -> str:
-    """Replace placeholders in message template with customer data."""
+    """Replace supported placeholders in a message template."""
     message = template
     replacements = {
         "{{name}}": customer.name or "there",
         "{{first_name}}": (customer.name or "there").split()[0],
         "{{email}}": customer.email or "",
-        "{{total_spend}}": f"₹{customer.total_spend:,.0f}" if customer.total_spend else "₹0",
+        "{{total_spend}}": f"Rs.{customer.total_spend:,.0f}" if customer.total_spend else "Rs.0",
         "{{order_count}}": str(customer.order_count or 0),
-        "{{avg_order}}": f"₹{customer.avg_order_value:,.0f}" if customer.avg_order_value else "₹0",
+        "{{avg_order}}": f"Rs.{customer.avg_order_value:,.0f}" if customer.avg_order_value else "Rs.0",
     }
     for placeholder, value in replacements.items():
         message = message.replace(placeholder, value)
@@ -122,7 +142,7 @@ async def get_campaign_stats(db: AsyncSession, campaign_id: UUID) -> dict:
     if not campaign:
         raise ValueError("Campaign not found")
 
-    total = campaign.total_recipients or 1  # Prevent division by zero
+    total = campaign.total_recipients or 1
 
     return {
         "campaign_id": str(campaign_id),

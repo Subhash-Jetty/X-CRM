@@ -1,39 +1,54 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { fetchApi } from "@/lib/api";
 
+type Customer = {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  order_count?: number;
+  total_spend?: number;
+  last_order_date?: string | null;
+  tags?: string[];
+};
+
+type CustomerPageResponse = {
+  items?: Customer[];
+};
+
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: "", email: "", phone: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    loadCustomers();
-  }, []);
-
-  const loadCustomers = async (searchQuery = "") => {
+  const loadCustomers = useCallback(async (searchQuery = "") => {
     setLoading(true);
     try {
       const url = searchQuery
         ? `/customers?search=${encodeURIComponent(searchQuery)}`
         : "/customers";
-      const data = await fetchApi(url);
+      const data = (await fetchApi(url)) as CustomerPageResponse;
       setCustomers(data.items || []);
     } catch (error) {
       console.error("Failed to load customers:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => loadCustomers());
+  }, [loadCustomers]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    loadCustomers(search);
+    void loadCustomers(search);
   };
 
   const handleAddCustomer = async (e: React.FormEvent) => {
@@ -53,7 +68,7 @@ export default function CustomersPage() {
       });
       setIsModalOpen(false);
       setNewCustomer({ name: "", email: "", phone: "" });
-      loadCustomers(search);
+      void loadCustomers(search);
     } catch (error) {
       console.error("Failed to add customer:", error);
       alert("Failed to add customer.");
@@ -174,7 +189,7 @@ export default function CustomersPage() {
               ) : (
                 // Data Rows
                 customers.map((c) => {
-                  const initials = c.name
+                  const initials = (c.name || "Unknown")
                     .split(" ")
                     .map((w: string) => w[0])
                     .join("")
@@ -221,7 +236,7 @@ export default function CustomersPage() {
                         style={{
                           fontWeight: 500,
                           color:
-                            c.total_spend > 5000
+                            (c.total_spend || 0) > 5000
                               ? "var(--success)"
                               : "inherit",
                         }}

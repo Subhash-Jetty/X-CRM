@@ -3,9 +3,10 @@ Customer ingestion and data management service.
 """
 from datetime import datetime
 from uuid import UUID
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.models import Customer, Order
 
@@ -16,6 +17,28 @@ _CUSTOMER_UUID_FIELDS = {"id"}
 
 _ORDER_DATETIME_FIELDS = {"created_at"}
 _ORDER_UUID_FIELDS = {"id", "customer_id"}
+_UPSERT_CHUNK_SIZE = 500
+
+
+def _model_column_names(model) -> set[str]:
+    return {col.name for col in model.__table__.columns}
+
+
+def _normalise_customer_record(record: dict) -> dict:
+    """Map rich demo/export customer rows onto the CRM customer schema."""
+    normalised = dict(record)
+
+    if not normalised.get("name"):
+        name_parts = [normalised.get("first_name"), normalised.get("last_name")]
+        name = " ".join(part for part in name_parts if part)
+        if name:
+            normalised["name"] = name
+
+    if not normalised.get("last_order_date") and normalised.get("last_active"):
+        normalised["last_order_date"] = normalised["last_active"]
+
+    allowed_columns = _model_column_names(Customer)
+    return {key: value for key, value in normalised.items() if key in allowed_columns}
 
 
 def _coerce_types(record: dict, datetime_fields: set, uuid_fields: set) -> dict:
@@ -37,32 +60,57 @@ def _coerce_types(record: dict, datetime_fields: set, uuid_fields: set) -> dict:
     return record
 
 
+def _dialect_name(db: AsyncSession) -> str:
+    bind = db.get_bind()
+    return bind.dialect.name if bind is not None else ""
+
+
+def _upsert_insert(model, values: list[dict], constraint_columns: list[str], db: AsyncSession):
+    """Build a dialect-aware upsert for the supported local/prod databases."""
+    dialect = _dialect_name(db)
+    if dialect == "postgresql":
+        stmt = pg_insert(model).values(values)
+    elif dialect == "sqlite":
+        stmt = sqlite_insert(model).values(values)
+    else:
+        return None
+
+    update_dict = {
+        col.name: stmt.excluded[col.name]
+        for col in model.__table__.columns
+        if col.name not in ["id", "created_at"]
+    }
+    return stmt.on_conflict_do_update(
+        index_elements=constraint_columns,
+        set_=update_dict,
+    )
+
+
 async def ingest_customers(db: AsyncSession, customers_data: list[dict]) -> int:
     """
-    Bulk upsert customers using Postgres INSERT ... ON CONFLICT DO UPDATE.
+    Bulk upsert customers using the active database dialect.
     """
     if not customers_data:
         return 0
 
     # Coerce str → datetime / UUID so asyncpg doesn't choke
+    prepared_customers = []
     for rec in customers_data:
-        _coerce_types(rec, _CUSTOMER_DATETIME_FIELDS, _CUSTOMER_UUID_FIELDS)
+        normalised = _normalise_customer_record(rec)
+        _coerce_types(normalised, _CUSTOMER_DATETIME_FIELDS, _CUSTOMER_UUID_FIELDS)
+        prepared_customers.append(normalised)
 
-    stmt = pg_insert(Customer).values(customers_data)
-    update_dict = {
-        col.name: getattr(stmt.excluded, col.name)
-        for col in Customer.__table__.columns
-        if col.name not in ["id", "created_at"]
-    }
-    
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["email"],
-        set_=update_dict
-    )
-    
-    await db.execute(stmt)
+    if _dialect_name(db) in {"postgresql", "sqlite"}:
+        for i in range(0, len(prepared_customers), _UPSERT_CHUNK_SIZE):
+            chunk = prepared_customers[i:i + _UPSERT_CHUNK_SIZE]
+            stmt = _upsert_insert(Customer, chunk, ["email"], db)
+            await db.execute(stmt)
+    else:
+        for record in prepared_customers:
+            await db.merge(Customer(**record))
+
     await db.flush()
-    return len(customers_data)
+    return len(prepared_customers)
 
 
 async def ingest_orders(db: AsyncSession, orders_data: list[dict]) -> int:
@@ -98,8 +146,13 @@ async def ingest_orders(db: AsyncSession, orders_data: list[dict]) -> int:
     if not valid_orders:
         return 0
 
-    # 3. Bulk insert orders
-    await db.execute(pg_insert(Order).values(valid_orders))
+    # 3. Bulk upsert orders by primary key. The seed data includes stable UUIDs,
+    # so rerunning ingestion should refresh rows rather than duplicate them.
+    stmt = _upsert_insert(Order, valid_orders, ["id"], db)
+    if stmt is not None:
+        await db.execute(stmt)
+    else:
+        await db.execute(insert(Order).values(valid_orders))
     await db.flush()
 
     # 4. Update aggregates in one go for ALL customers
@@ -109,27 +162,31 @@ async def ingest_orders(db: AsyncSession, orders_data: list[dict]) -> int:
 
 
 async def _update_all_customer_aggregates(db: AsyncSession):
-    """Recalculate aggregates for all customers using a single bulk SQL update."""
-    from sqlalchemy import text
-    sql = """
-    UPDATE customers
-    SET 
-        order_count = stats.order_count,
-        total_spend = stats.total_spend,
-        first_order_date = stats.first_order_date,
-        last_order_date = stats.last_order_date,
-        avg_order_value = CASE WHEN stats.order_count > 0 THEN stats.total_spend / stats.order_count ELSE 0 END,
-        updated_at = NOW()
-    FROM (
-        SELECT 
-            customer_id,
-            COUNT(id) as order_count,
-            COALESCE(SUM(amount), 0) as total_spend,
-            MIN(created_at) as first_order_date,
-            MAX(created_at) as last_order_date
-        FROM orders
-        GROUP BY customer_id
-    ) AS stats
-    WHERE customers.id = stats.customer_id;
-    """
-    await db.execute(text(sql))
+    """Recalculate aggregates from the orders table using portable SQLAlchemy."""
+    now = datetime.utcnow()
+    stats_result = await db.execute(
+        select(
+            Order.customer_id,
+            func.count(Order.id).label("order_count"),
+            func.coalesce(func.sum(Order.amount), 0).label("total_spend"),
+            func.min(Order.created_at).label("first_order_date"),
+            func.max(Order.created_at).label("last_order_date"),
+        )
+        .group_by(Order.customer_id)
+    )
+
+    for row in stats_result.all():
+        order_count = int(row.order_count or 0)
+        total_spend = float(row.total_spend or 0)
+        await db.execute(
+            update(Customer)
+            .where(Customer.id == row.customer_id)
+            .values(
+                order_count=order_count,
+                total_spend=total_spend,
+                first_order_date=row.first_order_date,
+                last_order_date=row.last_order_date,
+                avg_order_value=(total_spend / order_count) if order_count else 0,
+                updated_at=now,
+            )
+        )

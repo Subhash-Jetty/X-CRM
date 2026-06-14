@@ -11,13 +11,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const u = getUser();
-    if (!u) {
-      router.replace("/login");
-      return;
-    }
-    setUser(u);
-    setReady(true);
+    let mounted = true;
+    void Promise.resolve().then(() => {
+      const u = getUser();
+      if (!mounted) return;
+      if (!u) {
+        router.replace("/login");
+        return;
+      }
+      setUser(u);
+      setReady(true);
+    });
+
+    return () => {
+      mounted = false;
+    };
   }, [router]);
 
   if (!ready) {

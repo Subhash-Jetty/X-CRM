@@ -12,7 +12,11 @@ from app.schemas import (
     CampaignCreate, CampaignResponse, CommunicationResponse,
     MessageResponse,
 )
-from app.services.campaign_engine import send_campaign, get_campaign_stats
+from app.services.campaign_engine import (
+    CampaignDispatchError,
+    send_campaign,
+    get_campaign_stats,
+)
 
 router = APIRouter()
 
@@ -90,5 +94,8 @@ async def trigger_send(campaign_id: UUID, db: AsyncSession = Depends(get_db)):
             message=f"Campaign sent to {count} recipients",
             count=count,
         )
+    except CampaignDispatchError as e:
+        await db.commit()
+        raise HTTPException(status_code=502, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -8,8 +8,27 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  actions?: any[];
+  actions?: ChatAction[];
 }
+
+type ChatAction = {
+  type: string;
+  result?: {
+    total_matching?: number;
+    name?: string;
+    customer_count?: number;
+    recipients?: number;
+    status?: string;
+    message?: string;
+    error?: string;
+  };
+};
+
+type ChatResponse = {
+  reply: string;
+  conversation_id?: string;
+  actions_taken?: ChatAction[];
+};
 
 const SUGGESTIONS = [
   "Find customers who spent more than ₹5,000",
@@ -33,13 +52,28 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messageIdRef = useRef(2);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const nextMessageId = () => {
+    messageIdRef.current += 1;
+    return messageIdRef.current.toString();
+  };
+
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    const lastMessage = messages[messages.length - 1];
+
+    if (!lastMessage || isLoading || lastMessage.role === "user") {
+      scrollToBottom();
+      return;
+    }
+
+    document
+      .getElementById(`chat-message-${lastMessage.id}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [messages, isLoading]);
 
   const handleSubmit = async (text?: string) => {
@@ -47,7 +81,7 @@ export default function ChatPage() {
     if (!messageText || isLoading) return;
 
     const userMsg: Message = {
-      id: Date.now().toString(),
+      id: nextMessageId(),
       role: "user",
       content: messageText,
     };
@@ -61,23 +95,23 @@ export default function ChatPage() {
     }
 
     try {
-      const response = await fetchApi("/ai/chat", {
+      const response = (await fetchApi("/ai/chat", {
         method: "POST",
         body: JSON.stringify({
           message: userMsg.content,
           conversation_id: conversationId,
         }),
-      });
+      })) as ChatResponse;
 
       if (response.conversation_id && !conversationId) {
         setConversationId(response.conversation_id);
       }
 
       const assistantMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: nextMessageId(),
         role: "assistant",
         content: response.reply,
-        actions: response.actions_taken,
+        actions: response.actions_taken || [],
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
@@ -86,7 +120,7 @@ export default function ChatPage() {
       setMessages((prev) => [
         ...prev,
         {
-          id: (Date.now() + 1).toString(),
+          id: nextMessageId(),
           role: "assistant",
           content:
             "Sorry, I encountered an error. Please make sure the backend is running and the Groq/Gemini API keys are configured correctly.",
@@ -131,6 +165,12 @@ export default function ChatPage() {
             <path d="M22 2L11 13" /><path d="M22 2L15 22l-4-9-9-4 20-7z" />
           </svg>
         );
+      case "send_campaign":
+        return (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        );
       default:
         return (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -140,14 +180,19 @@ export default function ChatPage() {
     }
   };
 
-  const getActionDescription = (action: any) => {
+  const getActionDescription = (action: ChatAction) => {
     switch (action.type) {
       case "query_customers":
         return `Found ${action.result?.total_matching ?? "?"} matching customers`;
       case "create_segment":
         return `Created "${action.result?.name}" with ${action.result?.customer_count} members`;
       case "create_campaign":
-        return `Campaign "${action.result?.name}" created and ready to send`;
+        return `Campaign "${action.result?.name}" created`;
+      case "send_campaign":
+        if (action.result?.error) {
+          return `Campaign send failed: ${action.result.error}`;
+        }
+        return `Campaign sent to ${action.result?.recipients ?? "?"} recipients`;
       default:
         return action.type;
     }
@@ -172,6 +217,7 @@ export default function ChatPage() {
           {messages.map((msg) => (
             <div
               key={msg.id}
+              id={`chat-message-${msg.id}`}
               className={`chat-message chat-message-${msg.role}`}
             >
               <div className="chat-message-avatar">

@@ -15,7 +15,7 @@ class CustomerCreate(BaseModel):
     name: str
     email: Optional[str] = None
     phone: Optional[str] = None
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
 
 
 class CustomerResponse(BaseModel):
@@ -63,7 +63,7 @@ class OrderCreate(BaseModel):
     customer_email: Optional[str] = None  # Lookup by email if no ID
     order_number: Optional[str] = None
     amount: float
-    items: list[OrderItem] = []
+    items: list[OrderItem] = Field(default_factory=list)
     channel: Optional[str] = None
     status: str = "completed"
     created_at: Optional[datetime] = None
@@ -231,7 +231,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     conversation_id: UUID
-    actions_taken: list[dict] = []  # e.g., [{"type": "segment_created", "id": "..."}]
+    actions_taken: list[dict] = Field(default_factory=list)  # e.g., [{"type": "segment_created", "id": "..."}]
 
 
 class NLSegmentRequest(BaseModel):
@@ -243,7 +243,7 @@ class NLSegmentRequest(BaseModel):
 # ──────────────────────────────────────────────
 
 class PaginatedResponse(BaseModel):
-    items: list
+    items: list = Field(default_factory=list)
     total: int
     page: int
     page_size: int

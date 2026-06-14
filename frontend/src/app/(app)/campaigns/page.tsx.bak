@@ -238,7 +238,7 @@ export default function CampaignsPage() {
                       </span>
                       {c.sent_at && (
                         <span style={{ color: "var(--text-muted)", marginLeft: 8, fontSize: 12 }}>
-                          · {formatIST(c.sent_at)} IST
+                          � {formatIST(c.sent_at)} IST
                         </span>
                       )}
                     </div>
@@ -334,7 +334,7 @@ export default function CampaignsPage() {
       {campaigns.some(isCampaignLive) && (
         <div style={{ textAlign: "center", padding: "16px 0", color: "var(--text-muted)", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)", animation: "pulse 2s ease-in-out infinite" }} />
-          Live updating â€” delivery receipts arriving from channel service
+          Live updating — delivery receipts arriving from channel service
         </div>
       )}
     </div>

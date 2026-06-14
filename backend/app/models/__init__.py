@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Integer, Float, Boolean, DateTime, Text,
-    ForeignKey, Index, ARRAY
+    ForeignKey, Index, JSON
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -24,7 +24,7 @@ class Customer(Base):
     last_order_date = Column(DateTime)
     first_order_date = Column(DateTime)
     avg_order_value = Column(Float, default=0)
-    tags = Column(ARRAY(String), default=[])
+    tags = Column(JSON().with_variant(JSONB, "postgresql"), default=list)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -45,7 +45,7 @@ class Order(Base):
     customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False)
     order_number = Column(String(50))
     amount = Column(Float, nullable=False)
-    items = Column(JSONB, default=[])
+    items = Column(JSON().with_variant(JSONB, "postgresql"), default=list)
     channel = Column(String(50))  # online, in-store, app
     status = Column(String(20), default="completed")
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -65,7 +65,7 @@ class Segment(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     description = Column(Text)
-    rules = Column(JSONB, nullable=False)
+    rules = Column(JSON().with_variant(JSONB, "postgresql"), nullable=False)
     natural_language_query = Column(Text)
     customer_count = Column(Integer, default=0)
     is_ai_generated = Column(Boolean, default=False)
@@ -151,7 +151,7 @@ class AIConversation(Base):
     __tablename__ = "ai_conversations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    messages = Column(JSONB, default=[])
-    context = Column(JSONB)
+    messages = Column(JSON().with_variant(JSONB, "postgresql"), default=list)
+    context = Column(JSON().with_variant(JSONB, "postgresql"))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

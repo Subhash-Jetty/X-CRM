@@ -14,8 +14,14 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Timeouts (seconds)
+AI_CHAT_OVERALL_TIMEOUT = getattr(settings, "AI_CHAT_TIMEOUT", 30.0)
+GROQ_CALL_TIMEOUT = getattr(settings, "GROQ_TIMEOUT", 15.0)
+GEMINI_CALL_TIMEOUT = getattr(settings, "GEMINI_TIMEOUT", 20.0)
+AI_CHAT_MAX_TOKENS = int(getattr(settings, "AI_CHAT_MAX_TOKENS", 8192))
+
 # Initialize AI clients
-groq_client = AsyncGroq(api_key=settings.GROQ_API_KEY, timeout=15.0) if settings.GROQ_API_KEY else None
+groq_client = AsyncGroq(api_key=settings.GROQ_API_KEY, timeout=GROQ_CALL_TIMEOUT) if settings.GROQ_API_KEY else None
 
 
 def init_gemini():
@@ -44,6 +50,7 @@ You have access to these tools to help the marketer:
 
 2. **create_segment** — Create a customer segment from rules.
    Parameters: name (str), description (str), rules (list of {field, operator, value})
+    Note: by default the agent should only *preview* a segment and return matching counts/sample customers. To persist a segment it must pass `persist=true` explicitly when calling the tool.
 
 3. **draft_message** — Draft a personalized marketing message.
    Parameters: segment_description (str), channel (whatsapp/sms/email/rcs), tone (friendly/urgent/professional/playful), offer (str, optional)
@@ -87,7 +94,7 @@ TOOL_DEFINITIONS = [
                             "type": "object",
                             "properties": {
                                 "field": {"type": "string", "enum": ["total_spend", "order_count", "last_order_date", "avg_order_value", "name", "email"]},
-                                "operator": {"type": "string", "enum": [">", "<", ">=", "<=", "==", "!=", "days_ago_gt", "days_ago_lt", "contains"]},
+                                "operator": {"type": "string", "enum": [">", "<", ">=", "<=", "==", "!=", "days_ago_gt", "days_ago_lt", "contains", "array_contains"]},
                                 "value": {"type": ["string", "number"]}
                             },
                             "required": ["field", "operator", "value"]
@@ -103,7 +110,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "create_segment",
-            "description": "Create a new customer segment with the given rules. Use this when the marketer wants to define an audience.",
+            "description": "Create a new customer segment with the given rules. Use this when the marketer wants to define an audience. By default this returns a preview unless `persist: true` is provided.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -120,9 +127,24 @@ TOOL_DEFINITIONS = [
                             },
                             "required": ["field", "operator", "value"]
                         }
-                    }
+                    },
+                    "persist": {"type": "boolean", "description": "If true, persist the segment. Otherwise return a preview only."}
                 },
                 "required": ["name", "description", "rules"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_segment",
+            "description": "Delete an existing segment by id. Use only when the marketer confirms deletion.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "segment_id": {"type": "string", "description": "UUID of the segment to delete"}
+                },
+                "required": ["segment_id"]
             }
         }
     },
@@ -225,65 +247,86 @@ async def chat_with_ai(
     # Add current message
     messages.append({"role": "user", "content": message})
 
-    tool_calls_made = []
+    tool_calls_made: list[dict] = []
 
-    try:
-        # Try Groq first (blazing fast)
+    async def _call_providers() -> tuple[str | None, list[dict]]:
+        # Try Groq first
         if groq_client:
-            response = await asyncio.wait_for(
-                groq_client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=messages,
-                    tools=TOOL_DEFINITIONS,
-                    tool_choice="auto",
-                    temperature=0.7,
-                    max_tokens=2048,
-                ),
-                timeout=15.0
-            )
-
-            assistant_message = response.choices[0].message
-
-            # Check if AI wants to call tools
-            if assistant_message.tool_calls:
-                for tc in assistant_message.tool_calls:
-                    tool_calls_made.append({
-                        "name": tc.function.name,
-                        "arguments": json.loads(tc.function.arguments),
-                    })
-
-                return assistant_message.content or "", tool_calls_made
-
-            return assistant_message.content or "I'm not sure how to help with that.", tool_calls_made
-
-    except Exception as e:
-        logger.warning(f"Groq failed, falling back to Gemini: {e}")
-
-    # Fallback to Gemini
-    try:
-        if gemini_model:
-            # Convert messages to Gemini format
-            gemini_history = []
-            for msg in messages[1:]:  # Skip system (handled differently)
-                role = "user" if msg["role"] == "user" else "model"
-                gemini_history.append({"role": role, "parts": [msg["content"]]})
-
-            response = await asyncio.wait_for(
-                gemini_model.generate_content_async(
-                    gemini_history,
-                    generation_config=genai.types.GenerationConfig(
+            try:
+                response = await asyncio.wait_for(
+                    groq_client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=messages,
+                        tools=TOOL_DEFINITIONS,
+                        tool_choice="auto",
                         temperature=0.7,
-                        max_output_tokens=2048,
+                        max_tokens=AI_CHAT_MAX_TOKENS,
                     ),
-                ),
-                timeout=20.0
-            )
-            return response.text or "I'm not sure how to help with that.", tool_calls_made
+                    timeout=GROQ_CALL_TIMEOUT,
+                )
 
-    except Exception as e:
-        logger.error(f"Both Groq and Gemini failed: {e}")
+                assistant_message = response.choices[0].message
 
-    return "I'm experiencing some issues right now. Please try again in a moment.", tool_calls_made
+                # Check if AI wants to call tools
+                if getattr(assistant_message, "tool_calls", None):
+                    for tc in assistant_message.tool_calls:
+                        try:
+                            tool_calls_made.append({
+                                "name": tc.function.name,
+                                "arguments": json.loads(tc.function.arguments),
+                            })
+                        except Exception:
+                            logger.exception("Failed to parse tool call arguments from Groq response")
+
+                    return assistant_message.content or "", tool_calls_made
+
+                return assistant_message.content or "I'm not sure how to help with that.", tool_calls_made
+
+            except asyncio.TimeoutError:
+                logger.warning("Groq chat call timed out after %s seconds", GROQ_CALL_TIMEOUT)
+            except Exception:
+                logger.exception("Groq provider error, falling back to Gemini")
+
+        # Fallback to Gemini
+        if gemini_model:
+            try:
+                # Convert messages to Gemini format
+                gemini_history = []
+                for msg in messages[1:]:  # Skip system (handled differently)
+                    role = "user" if msg["role"] == "user" else "model"
+                    gemini_history.append({"role": role, "parts": [msg["content"]]})
+
+                response = await asyncio.wait_for(
+                    gemini_model.generate_content_async(
+                        gemini_history,
+                        generation_config=genai.types.GenerationConfig(
+                            temperature=0.7,
+                            max_output_tokens=AI_CHAT_MAX_TOKENS,
+                        ),
+                    ),
+                    timeout=GEMINI_CALL_TIMEOUT,
+                )
+                return response.text or "I'm not sure how to help with that.", tool_calls_made
+
+            except asyncio.TimeoutError:
+                logger.warning("Gemini call timed out after %s seconds", GEMINI_CALL_TIMEOUT)
+            except Exception:
+                logger.exception("Gemini provider error")
+
+        return None, tool_calls_made
+
+    try:
+        reply, calls = await asyncio.wait_for(_call_providers(), timeout=AI_CHAT_OVERALL_TIMEOUT)
+        # _call_providers returns (None, []) when both providers failed or timed out
+        if reply is None:
+            return "I'm experiencing some issues right now. Please try again in a moment.", calls
+        return reply, calls
+    except asyncio.TimeoutError:
+        logger.error("AI chat overall timeout after %s seconds", AI_CHAT_OVERALL_TIMEOUT)
+        return "AI provider timed out. Please try again later.", tool_calls_made
+    except Exception:
+        logger.exception("Unexpected error in chat_with_ai")
+        return "I'm experiencing some issues right now. Please try again in a moment.", tool_calls_made
 
 
 async def generate_message_draft(

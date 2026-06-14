@@ -3,6 +3,32 @@
 import { useState, useRef } from "react";
 import { fetchApi } from "@/lib/api";
 
+type JsonRecord = Record<string, unknown>;
+
+type ImportResponse = {
+  message?: string;
+  count?: number;
+};
+
+type SeedCustomer = {
+  name: string;
+  email: string;
+  phone?: string;
+  tags?: string[];
+};
+
+type CustomerPageResponse = {
+  items?: SeedCustomer[];
+};
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export default function ImportPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -20,18 +46,18 @@ export default function ImportPage() {
 
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
+      const data = JSON.parse(text) as unknown;
 
       // Detect file type: customers or orders
-      if (data.customers && Array.isArray(data.customers)) {
+      if (isRecord(data) && Array.isArray(data.customers)) {
         setProgress(`Uploading ${data.customers.length} customers...`);
-        const result = await fetchApi("/customers/ingest", {
+        const result = (await fetchApi("/customers/ingest", {
           method: "POST",
           body: JSON.stringify({ customers: data.customers }),
-        });
+        })) as ImportResponse;
         setStatus("success");
         setMessage(result.message || `Successfully ingested ${data.customers.length} customers`);
-      } else if (data.orders && Array.isArray(data.orders)) {
+      } else if (isRecord(data) && Array.isArray(data.orders)) {
         // Chunk orders to avoid request size limits
         const chunkSize = 500;
         const orders = data.orders;
@@ -40,10 +66,10 @@ export default function ImportPage() {
         for (let i = 0; i < orders.length; i += chunkSize) {
           const chunk = orders.slice(i, i + chunkSize);
           setProgress(`Uploading orders: ${Math.min(i + chunkSize, orders.length)}/${orders.length}...`);
-          const result = await fetchApi("/orders/ingest", {
+          const result = (await fetchApi("/orders/ingest", {
             method: "POST",
             body: JSON.stringify({ orders: chunk }),
-          });
+          })) as ImportResponse;
           totalIngested += result.count || chunk.length;
         }
 
@@ -79,9 +105,9 @@ export default function ImportPage() {
       } else {
         throw new Error("Unrecognized JSON format. Expected { customers: [...] } or { orders: [...] }");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setStatus("error");
-      setMessage(error.message || "Failed to process file. Check the format and try again.");
+      setMessage(getErrorMessage(error, "Failed to process file. Check the format and try again."));
     } finally {
       setLoading(false);
       setProgress("");
@@ -107,7 +133,7 @@ export default function ImportPage() {
       // Step 2: Generate and ingest sample orders
       setProgress("Generating sample order data...");
       // We need customer emails to link orders
-      const customersResp = await fetchApi("/customers?page_size=100");
+      const customersResp = (await fetchApi("/customers?page_size=100")) as CustomerPageResponse;
       const existingCustomers = customersResp.items || [];
 
       if (existingCustomers.length > 0) {
@@ -121,9 +147,9 @@ export default function ImportPage() {
 
       setStatus("success");
       setMessage(`Demo data loaded! ${sampleCustomers.length} customers and 200 orders ingested successfully.`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       setStatus("error");
-      setMessage(error.message || "Failed to load demo data. Make sure the backend is running.");
+      setMessage(getErrorMessage(error, "Failed to load demo data. Make sure the backend is running."));
     } finally {
       setLoading(false);
       setProgress("");
@@ -284,11 +310,11 @@ export default function ImportPage() {
 
 // ── Sample Data Generators ──────────────────────────
 
-function generateSampleCustomers(count: number) {
+function generateSampleCustomers(count: number): SeedCustomer[] {
   const firstNames = ["Amit", "Priya", "Rahul", "Sneha", "Vikram", "Ananya", "Rohit", "Neha", "Arjun", "Kavya", "Sanjay", "Divya", "Karan", "Pooja", "Aditya", "Riya", "Manish", "Simran", "Nikhil", "Megha"];
   const lastNames = ["Sharma", "Patel", "Singh", "Gupta", "Kumar", "Mehta", "Joshi", "Verma", "Reddy", "Nair", "Chopra", "Bhat", "Iyer", "Rao", "Malhotra"];
   const tags = ["coffee-lover", "frequent-buyer", "weekend-visitor", "app-user", "loyalty-member", "new-customer", "premium"];
-  const customers = [];
+  const customers: SeedCustomer[] = [];
 
   for (let i = 0; i < count; i++) {
     const first = firstNames[Math.floor(Math.random() * firstNames.length)];
@@ -307,7 +333,7 @@ function generateSampleCustomers(count: number) {
   return customers;
 }
 
-function generateSampleOrders(customers: any[], count: number) {
+function generateSampleOrders(customers: SeedCustomer[], count: number) {
   const items = [
     { name: "Espresso", price: 180 },
     { name: "Cappuccino", price: 250 },

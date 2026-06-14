@@ -33,6 +33,3 @@ services:
     plan: free
     branch: master
     healthCheckPath: /health
-    envVars:
-      - key: CRM_URL
-        sync: false

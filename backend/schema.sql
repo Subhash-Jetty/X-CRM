@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS customers (
     last_order_date TIMESTAMP,
     first_order_date TIMESTAMP,
     avg_order_value DECIMAL(10,2) DEFAULT 0,
-    tags TEXT[] DEFAULT '{}',
+    tags JSONB NOT NULL DEFAULT '[]',
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );

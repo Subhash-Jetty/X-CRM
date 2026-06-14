@@ -10,21 +10,18 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://user:pass@localhost:5432/xeno"
 
-    # Redis (Upstash)
-    REDIS_URL: str = "redis://localhost:6379"
-
     # Channel Service
-    CHANNEL_SERVICE_URL: str = "http://localhost:8001"
+    CHANNEL_SERVICE_URL: str = "http://127.0.0.1:8001"
 
     # AI Providers
     GROQ_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
 
     # Backend (self-URL for callbacks)
-    BACKEND_URL: str = "http://localhost:8000"
+    BACKEND_URL: str = "http://127.0.0.1:8000"
 
     # Frontend
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "http://127.0.0.1:3000"
 
     # App
     DEBUG: bool = False

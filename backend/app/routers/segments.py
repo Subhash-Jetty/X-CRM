@@ -1,6 +1,7 @@
 """
 Segment API routes — CRUD, preview, refresh.
 """
+import json
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, update, func, desc
@@ -108,9 +109,24 @@ async def preview_segment_rules(
     """Preview matching customers without creating a segment."""
     rules_dicts = [r.model_dump() for r in payload.rules]
     customers, total = await preview_segment(db, rules_dicts, limit=10)
+    # Provide a suggested create payload so callers (or the AI) can easily persist the preview.
+    create_payload = {
+        "name": payload.name or "New Segment",
+        "description": payload.description or "",
+        "rules": rules_dicts,
+        "natural_language_query": payload.natural_language_query,
+        "is_ai_generated": payload.is_ai_generated,
+    }
+
+    create_example_curl = "curl -X POST 'http://127.0.0.1:8000/api/segments' -H 'Content-Type: application/json' -d '{}'".format(
+        json.dumps(create_payload)
+    )
+
     return {
         "total_matching": total,
         "preview": [CustomerResponse.model_validate(c) for c in customers],
+        "create_payload": create_payload,
+        "create_example_curl": create_example_curl,
     }
 
 

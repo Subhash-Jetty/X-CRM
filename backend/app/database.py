@@ -12,17 +12,27 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_async_engine(
-    settings.DATABASE_URL.strip(),
-    echo=settings.DEBUG,
-    pool_size=5,
-    max_overflow=10,
-    pool_pre_ping=True,
-    connect_args={
-        "prepared_statement_cache_size": 0,  # For SQLAlchemy
-        "statement_cache_size": 0,           # For asyncpg
-    },
-)
+# Create engine with driver-specific options (sqlite vs asyncpg)
+db_url = settings.DATABASE_URL.strip()
+use_sqlite = db_url.startswith("sqlite") or "aiosqlite" in db_url
+
+if use_sqlite:
+    engine = create_async_engine(
+        db_url,
+        echo=settings.DEBUG,
+    )
+else:
+    engine = create_async_engine(
+        db_url,
+        echo=settings.DEBUG,
+        pool_size=5,
+        max_overflow=10,
+        pool_pre_ping=True,
+        connect_args={
+            "prepared_statement_cache_size": 0,  # For SQLAlchemy
+            "statement_cache_size": 0,           # For asyncpg
+        },
+    )
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 async_session_maker = async_session  # Alias used by seed scripts
