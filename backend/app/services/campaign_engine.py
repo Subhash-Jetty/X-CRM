@@ -81,12 +81,15 @@ async def send_campaign(db: AsyncSession, campaign_id: UUID) -> int:
 
     dispatch_error = None
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        channel_url = settings.CHANNEL_SERVICE_URL.rstrip("/")
+        backend_url = settings.BACKEND_URL.rstrip("/")
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
-                f"{settings.CHANNEL_SERVICE_URL}/channel/send",
+                f"{channel_url}/channel/send",
                 json={
                     "communications": communications_batch,
-                    "callback_url": f"{settings.BACKEND_URL}/api/receipts/batch",
+                    "callback_url": f"{backend_url}/api/receipts/batch",
                 },
             )
         if 200 <= response.status_code < 300:
