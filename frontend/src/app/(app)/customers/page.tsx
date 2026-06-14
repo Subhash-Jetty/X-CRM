@@ -17,6 +17,9 @@ type Customer = {
 
 type CustomerPageResponse = {
   items?: Customer[];
+  total?: number;
+  page?: number;
+  total_pages?: number;
 };
 
 export default function CustomersPage() {
@@ -26,15 +29,18 @@ export default function CustomersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: "", email: "", phone: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
-  const loadCustomers = useCallback(async (searchQuery = "") => {
+  const loadCustomers = useCallback(async (searchQuery = "", pageNum = 1) => {
     setLoading(true);
     try {
       const url = searchQuery
-        ? `/customers?search=${encodeURIComponent(searchQuery)}`
-        : "/customers";
+        ? `/customers?search=${encodeURIComponent(searchQuery)}&page=${pageNum}`
+        : `/customers?page=${pageNum}`;
       const data = (await fetchApi(url)) as CustomerPageResponse;
       setCustomers(data.items || []);
+      setTotalPages(data.total_pages || 1);
     } catch (error) {
       console.error("Failed to load customers:", error);
     } finally {
@@ -48,7 +54,8 @@ export default function CustomersPage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    void loadCustomers(search);
+    setPage(1);
+    void loadCustomers(search, 1);
   };
 
   const handleAddCustomer = async (e: React.FormEvent) => {
@@ -68,7 +75,8 @@ export default function CustomersPage() {
       });
       setIsModalOpen(false);
       setNewCustomer({ name: "", email: "", phone: "" });
-      void loadCustomers(search);
+      setPage(1);
+      void loadCustomers(search, 1);
     } catch (error) {
       console.error("Failed to add customer:", error);
       alert("Failed to add customer.");
@@ -282,6 +290,43 @@ export default function CustomersPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div style={{ padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-subtle)" }}>
+            <button 
+              className="btn btn-secondary" 
+              disabled={page === 1}
+              onClick={() => {
+                const newPage = page - 1;
+                setPage(newPage);
+                void loadCustomers(search, newPage);
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+              Previous
+            </button>
+            <span style={{ fontSize: "14px", color: "var(--text-muted)", fontWeight: 500 }}>
+              Page {page} of {totalPages}
+            </span>
+            <button 
+              className="btn btn-secondary" 
+              disabled={page === totalPages}
+              onClick={() => {
+                const newPage = page + 1;
+                setPage(newPage);
+                void loadCustomers(search, newPage);
+              }}
+            >
+              Next
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 6 }}>
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Add Customer Modal */}

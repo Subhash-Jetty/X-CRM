@@ -379,21 +379,21 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     # --- Quick local intent detection for simple segmentation queries ---
     # This avoids waiting on external LLM providers when the user asks to find customers.
     # Example: "Find customers who spent more than 5000"
-    try:
-        msg = request.message or ""
-        
-        # Check if user is confirming a previous preview
-        if history and re.search(r"\b(yes|create|save|sure|do it)\b", msg, re.IGNORECASE):
-            last_msg = history[-1]["content"]
-            
-            # Check for "spent more than" preview
-            spent_preview_match = re.search(r"Preview: found \d+ customers who spent more than (\d+)", last_msg)
-            if spent_preview_match:
+    msg = request.message or ""
+
+    # Check if user is confirming a previous preview (separate handler so errors surface)
+    if history and re.search(r"\b(yes|yeah|yep|create|save|sure|do it|confirm|ok|okay|go ahead)\b", msg, re.IGNORECASE):
+        last_msg = history[-1]["content"] if history else ""
+
+        # Check for "spent more than" preview
+        spent_preview_match = re.search(r"Preview: found \d+ customers who spent more than (\d+)", last_msg)
+        if spent_preview_match:
+            try:
                 value = float(spent_preview_match.group(1))
                 rules = [{"field": "total_spend", "operator": ">", "value": value}]
                 segment_name = "VIP Customers" if value >= 5000 else f"Spent > {int(value)}"
                 description = f"Customers who spent more than {int(value)}"
-                
+
                 segment = await create_segment_with_members(
                     db=db,
                     name=segment_name,
@@ -403,7 +403,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                     is_ai_generated=True,
                 )
                 reply_text = f"Great! The segment **{segment.name}** has been successfully created with {segment.customer_count} members. What would you like to do next? We can draft a campaign for them!"
-                
+
                 conversation_id = await save_chat_turn(
                     db=db,
                     conversation_id=request.conversation_id,
@@ -421,15 +421,33 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                         "result": {"persisted": True, "segment_id": str(segment.id), "name": segment.name, "customer_count": segment.customer_count},
                     }],
                 )
-            
-            # Check for "inactive" preview
-            inactive_preview_match = re.search(r"Preview: found \d+ customers inactive for more than (\d+) days", last_msg)
-            if inactive_preview_match:
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).exception("Error creating segment from confirmation")
+                reply_text = f"I tried to create the segment but encountered an error: {str(e)[:200]}. Please try again."
+                conversation_id = await save_chat_turn(
+                    db=db,
+                    conversation_id=request.conversation_id,
+                    history=history,
+                    db_context=db_context,
+                    user_message=msg,
+                    assistant_reply=reply_text,
+                )
+                return ChatResponse(
+                    reply=reply_text,
+                    conversation_id=conversation_id,
+                    actions_taken=[],
+                )
+
+        # Check for "inactive" preview
+        inactive_preview_match = re.search(r"Preview: found \d+ customers inactive for more than (\d+) days", last_msg)
+        if inactive_preview_match:
+            try:
                 days = int(inactive_preview_match.group(1))
                 rules = [{"field": "last_order_date", "operator": "days_ago_gt", "value": days}]
                 segment_name = f"Inactive Customers - {days} Days"
                 description = f"Customers who have been inactive for the past {days} days"
-                
+
                 segment = await create_segment_with_members(
                     db=db,
                     name=segment_name,
@@ -439,7 +457,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                     is_ai_generated=True,
                 )
                 reply_text = f"Great! The segment **{segment.name}** has been successfully created with {segment.customer_count} members. Want me to draft a win-back campaign?"
-                
+
                 conversation_id = await save_chat_turn(
                     db=db,
                     conversation_id=request.conversation_id,
@@ -457,7 +475,34 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                         "result": {"persisted": True, "segment_id": str(segment.id), "name": segment.name, "customer_count": segment.customer_count},
                     }],
                 )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).exception("Error creating segment from confirmation")
+                reply_text = f"I tried to create the segment but encountered an error: {str(e)[:200]}. Please try again."
+                conversation_id = await save_chat_turn(
+                    db=db,
+                    conversation_id=request.conversation_id,
+                    history=history,
+                    db_context=db_context,
+                    user_message=msg,
+                    assistant_reply=reply_text,
+                )
+                return ChatResponse(
+                    reply=reply_text,
+                    conversation_id=conversation_id,
+                    actions_taken=[],
+                )
 
+        # Check for any generic preview confirmation (e.g., order count, avg order, etc.)
+        generic_preview_match = re.search(r"Preview: found (\d+) customers", last_msg)
+        if generic_preview_match:
+            # Try to extract rules from the context
+            rules_match = re.search(r"rules.*?(\[.*?\])", last_msg)
+            if not rules_match:
+                # Fall through to LLM for handling
+                pass
+
+    try:
         inactive_days = parse_inactive_segment_request(msg)
         if inactive_days is not None:
             rules = [{"field": "last_order_date", "operator": "days_ago_gt", "value": inactive_days}]
@@ -559,34 +604,14 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
                 reply_text = f"Preview: found {total} customers who spent more than {int(value)}. Here are {len(sample)} samples: " + ", ".join([s["name"] for s in sample]) + ". Would you like to create this segment?"
 
-                # Save conversation (upsert) similar to the normal flow
-                conversation_id = request.conversation_id
-                history = []
-                if conversation_id:
-                    result = await db.execute(
-                        select(AIConversation).where(AIConversation.id == conversation_id)
-                    )
-                    conv = result.scalar_one_or_none()
-                    if conv:
-                        history = conv.messages or []
-
-                if not conversation_id:
-                    conversation_id = uuid4()
-
-                history.append({"role": "user", "content": request.message})
-                history.append({"role": "assistant", "content": reply_text})
-
-                result = await db.execute(
-                    select(AIConversation).where(AIConversation.id == conversation_id)
+                conversation_id = await save_chat_turn(
+                    db=db,
+                    conversation_id=request.conversation_id,
+                    history=history,
+                    db_context=db_context,
+                    user_message=request.message,
+                    assistant_reply=reply_text,
                 )
-                conv = result.scalar_one_or_none()
-                if conv:
-                    conv.messages = history
-                else:
-                    conv = AIConversation(id=conversation_id, messages=history, context=db_context)
-                    db.add(conv)
-
-                await db.flush()
 
                 return ChatResponse(reply=reply_text, conversation_id=conversation_id, actions_taken=[{"type": "preview_segment", "rules": rules, "total_matching": total, "sample": sample}])
     except Exception:

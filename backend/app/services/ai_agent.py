@@ -294,6 +294,8 @@ async def chat_with_ai(
                 gemini_history = []
                 for msg in messages[1:]:  # Skip system (handled differently)
                     role = "user" if msg["role"] == "user" else "model"
+                    if not gemini_history and role == "model":
+                        continue  # Gemini requires history to start with a user message
                     gemini_history.append({"role": role, "parts": [msg["content"]]})
 
                 response = await asyncio.wait_for(

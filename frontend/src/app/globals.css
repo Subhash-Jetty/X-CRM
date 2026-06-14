@@ -76,6 +76,31 @@
   --sidebar-width: 260px;
 }
 
+/* Light Theme Overrides */
+[data-theme="light"] {
+  --bg-root: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f1f5f9;
+  --bg-surface-raised: #ffffff;
+  --bg-glass: rgba(255, 255, 255, 0.85);
+  --bg-glass-hover: rgba(255, 255, 255, 0.95);
+
+  --border-subtle: #e2e8f0;
+  --border-default: #cbd5e1;
+  --border-strong: #94a3b8;
+
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+  --gradient-surface: linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(248, 250, 252, 1));
+}
+
 /* ═══════════════════════════════════════════════════
    RESET & BASE
    ═══════════════════════════════════════════════════ */
@@ -1256,22 +1281,6 @@ h3 {
 @media (max-width: 768px) {
   :root {
     --sidebar-width: 280px;
-  }
-
-  /* Sidebar becomes off-canvas overlay */
-  .sidebar {
-    position: fixed;
-    left: 0;
-    top: 0;
-    z-index: 1000;
-    transform: translateX(-100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: none;
-  }
-
-  .sidebar.open {
-    transform: translateX(0);
-    box-shadow: 4px 0 30px rgba(0, 0, 0, 0.5);
   }
 
   /* Overlay backdrop */
