@@ -28,10 +28,9 @@ else:
         pool_size=5,
         max_overflow=10,
         pool_pre_ping=True,
-        # Disable SQLAlchemy's statement cache to avoid PgBouncer transaction-mode collisions
-        prepared_statement_cache_size=0,
         connect_args={
             "statement_cache_size": 0,           # Disable asyncpg's internal cache
+            "prepared_statement_name_func": lambda: f"__asyncpg_{__import__('uuid').uuid4().hex}__",
         },
     )
 
