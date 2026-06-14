@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { getUser } from "@/lib/auth";
 import "./Sidebar.css";
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen }: { isOpen?: boolean }) {
   const pathname = usePathname();
   const user = getUser();
 
@@ -89,7 +89,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="sidebar" id="main-sidebar">
+    <aside className={`sidebar${isOpen ? " open" : ""}`} id="main-sidebar">
       {/* Logo */}
       <div className="sidebar-header">
         <Link href="/dashboard" className="sidebar-logo">

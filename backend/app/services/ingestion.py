@@ -162,31 +162,36 @@ async def ingest_orders(db: AsyncSession, orders_data: list[dict]) -> int:
 
 
 async def _update_all_customer_aggregates(db: AsyncSession):
-    """Recalculate aggregates from the orders table using portable SQLAlchemy."""
+    """Recalculate aggregates from the orders table using a single bulk UPDATE."""
     now = datetime.utcnow()
-    stats_result = await db.execute(
+
+    # Build a subquery with per-customer aggregates
+    stats_sub = (
         select(
-            Order.customer_id,
+            Order.customer_id.label("cid"),
             func.count(Order.id).label("order_count"),
             func.coalesce(func.sum(Order.amount), 0).label("total_spend"),
             func.min(Order.created_at).label("first_order_date"),
             func.max(Order.created_at).label("last_order_date"),
         )
         .group_by(Order.customer_id)
+        .subquery("order_stats")
     )
 
-    for row in stats_result.all():
-        order_count = int(row.order_count or 0)
-        total_spend = float(row.total_spend or 0)
-        await db.execute(
-            update(Customer)
-            .where(Customer.id == row.customer_id)
-            .values(
-                order_count=order_count,
-                total_spend=total_spend,
-                first_order_date=row.first_order_date,
-                last_order_date=row.last_order_date,
-                avg_order_value=(total_spend / order_count) if order_count else 0,
-                updated_at=now,
-            )
+    # Single bulk UPDATE using correlated subquery — avoids N round-trips
+    await db.execute(
+        update(Customer)
+        .where(Customer.id == stats_sub.c.cid)
+        .values(
+            order_count=stats_sub.c.order_count,
+            total_spend=stats_sub.c.total_spend,
+            first_order_date=stats_sub.c.first_order_date,
+            last_order_date=stats_sub.c.last_order_date,
+            avg_order_value=func.case(
+                (stats_sub.c.order_count > 0,
+                 stats_sub.c.total_spend / stats_sub.c.order_count),
+                else_=0,
+            ),
+            updated_at=now,
         )
+    )

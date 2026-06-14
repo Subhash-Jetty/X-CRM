@@ -100,8 +100,7 @@ async def send_campaign(db: AsyncSession, campaign_id: UUID) -> int:
                 comm.failed_at = datetime.utcnow()
                 comm.error_message = f"Channel service rejected dispatch with HTTP {response.status_code}"
             dispatch_error = (
-                f"Channel service rejected dispatch with HTTP {response.status_code}: "
-                f"{response.text[:200]}"
+                f"Channel service rejected dispatch with HTTP {response.status_code}"
             )
     except httpx.RequestError as exc:
         campaign.status = "failed"

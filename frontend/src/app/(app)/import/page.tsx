@@ -217,23 +217,6 @@ export default function ImportPage() {
               style={{ display: "none" }}
             />
           </div>
-
-          <div style={{ marginTop: 16, fontSize: 12, color: "var(--text-muted)" }}>
-            <strong>Expected formats:</strong>
-            <pre style={{ marginTop: 8, padding: 12, background: "var(--bg-root)", borderRadius: 8, overflow: "auto", fontSize: 11, lineHeight: 1.5 }}>
-{`{ "customers": [
-    { "name": "...", "email": "...", 
-      "phone": "..." }
-  ] }
-
-{ "orders": [
-    { "customer_email": "...",
-      "amount": 500,
-      "items": [{"name":"...", "price":250, "quantity":2}],
-      "channel": "online" }
-  ] }`}
-            </pre>
-          </div>
         </div>
 
         {/* Demo Seed Data */}

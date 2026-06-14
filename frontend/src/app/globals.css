@@ -1228,3 +1228,258 @@ h3 {
 .skeleton-line-long {
   width: 240px;
 }
+
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE — TABLET (≤ 1024px)
+   ═══════════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .campaign-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE — MOBILE (≤ 768px)
+   ═══════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 280px;
+  }
+
+  /* Sidebar becomes off-canvas overlay */
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: none;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 30px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Overlay backdrop */
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .sidebar-overlay.visible {
+    display: block;
+  }
+
+  /* Hamburger button */
+  .mobile-menu-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .mobile-menu-btn:hover {
+    background: var(--bg-surface-hover);
+    color: var(--text-primary);
+  }
+
+  /* Topbar adjustments */
+  .app-topbar {
+    padding: 0 16px;
+    justify-content: space-between;
+  }
+
+  .topbar-name {
+    display: none;
+  }
+
+  /* Page content adjustments */
+  .app-page {
+    padding: 20px 16px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+
+  h2 {
+    font-size: 18px;
+  }
+
+  /* Stat cards */
+  .stat-value {
+    font-size: 22px;
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  /* Quick actions stack */
+  .grid-cols-3 .quick-action {
+    padding: 16px;
+  }
+
+  /* Segment cards */
+  .segment-count-number {
+    font-size: 26px;
+  }
+
+  .segment-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Campaign cards */
+  .campaign-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  /* Tables become scrollable */
+  .data-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 10px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  /* Import page: grid to single column already handled */
+  .drop-zone {
+    padding: 32px 16px;
+  }
+
+  /* Buttons */
+  .btn-lg {
+    padding: 12px 20px;
+    font-size: 15px;
+  }
+
+  /* Auth pages */
+  .auth-card {
+    padding: 28px 20px;
+  }
+
+  /* Search bar full width */
+  .search-bar {
+    width: 100%;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE — SMALL MOBILE (≤ 480px)
+   ═══════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .app-page {
+    padding: 16px 12px;
+  }
+
+  h1 {
+    font-size: 20px;
+  }
+
+  .stat-card {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .stat-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .campaign-card {
+    padding: 16px;
+  }
+
+  .segment-card {
+    padding: 16px;
+  }
+
+  .campaign-stats-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .campaign-stat-value {
+    font-size: 16px;
+  }
+
+  .campaign-stat-label {
+    font-size: 10px;
+  }
+
+  .quick-action {
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .suggestion-card {
+    padding: 12px;
+  }
+
+  .badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  /* Customer cell on mobile */
+  .customer-cell {
+    gap: 8px;
+  }
+
+  .customer-avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 11px;
+  }
+}
+
+/* Hide mobile-only elements on desktop */
+@media (min-width: 769px) {
+  .mobile-menu-btn {
+    display: none !important;
+  }
+
+  .sidebar-overlay {
+    display: none !important;
+  }
+}
