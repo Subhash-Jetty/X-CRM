@@ -25,7 +25,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(6, 7, 10, 0.6);
+  background: rgba(11, 17, 32, 0.65);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-subtle);
@@ -39,17 +39,9 @@
   gap: 10px;
 }
 
-.hero-logo-mark {
-  width: 34px;
-  height: 34px;
-  background: var(--gradient-primary);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 18px;
-  color: white;
+.hero-logo-img {
+  height: 30px;
+  width: auto;
 }
 
 .hero-logo-text {
@@ -85,7 +77,7 @@
   padding: 8px 18px;
   border-radius: var(--radius-full);
   background: var(--primary-glow);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(37, 99, 235, 0.2);
   font-size: 13px;
   font-weight: 500;
   color: var(--primary-light);

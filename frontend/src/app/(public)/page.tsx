@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import "./hero.css";
 
@@ -53,8 +54,14 @@ export default function LandingPage() {
       <nav className="hero-nav">
         <div className="hero-nav-inner">
           <Link href="/" className="hero-logo">
-            <div className="hero-logo-mark">X</div>
-            <span className="hero-logo-text">XENO</span>
+            <Image
+              src="/xeno-logo.svg"
+              alt="Xeno"
+              width={110}
+              height={30}
+              priority
+              className="hero-logo-img"
+            />
           </Link>
           <div className="hero-nav-links">
             <Link href="/login" className="btn btn-ghost">

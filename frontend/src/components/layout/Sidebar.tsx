@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { getUser } from "@/lib/auth";
 import "./Sidebar.css";
@@ -93,8 +94,14 @@ export default function Sidebar({ isOpen }: { isOpen?: boolean }) {
       {/* Logo */}
       <div className="sidebar-header">
         <Link href="/dashboard" className="sidebar-logo">
-          <div className="sidebar-logo-mark">X</div>
-          <span className="sidebar-logo-text">XENO</span>
+          <Image
+            src="/xeno-logo-white.svg"
+            alt="Xeno"
+            width={110}
+            height={30}
+            priority
+            className="sidebar-logo-img"
+          />
         </Link>
       </div>
 

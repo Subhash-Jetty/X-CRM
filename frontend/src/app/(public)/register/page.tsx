@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { login } from "@/lib/auth";
@@ -39,7 +40,13 @@ export default function RegisterPage() {
       <div className="auth-card glass-panel-static">
         {/* Logo */}
         <div className="auth-logo">
-          <div className="auth-logo-mark">X</div>
+          <Image
+            src="/xeno-logo.svg"
+            alt="Xeno"
+            width={120}
+            height={32}
+            priority
+          />
         </div>
 
         <h1 className="auth-title">Create your account</h1>
