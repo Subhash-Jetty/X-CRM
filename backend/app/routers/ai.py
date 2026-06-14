@@ -381,6 +381,83 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     # Example: "Find customers who spent more than 5000"
     try:
         msg = request.message or ""
+        
+        # Check if user is confirming a previous preview
+        if history and re.search(r"\b(yes|create|save|sure|do it)\b", msg, re.IGNORECASE):
+            last_msg = history[-1]["content"]
+            
+            # Check for "spent more than" preview
+            spent_preview_match = re.search(r"Preview: found \d+ customers who spent more than (\d+)", last_msg)
+            if spent_preview_match:
+                value = float(spent_preview_match.group(1))
+                rules = [{"field": "total_spend", "operator": ">", "value": value}]
+                segment_name = "VIP Customers" if value >= 5000 else f"Spent > {int(value)}"
+                description = f"Customers who spent more than {int(value)}"
+                
+                segment = await create_segment_with_members(
+                    db=db,
+                    name=segment_name,
+                    description=description,
+                    rules=rules,
+                    natural_language_query=f"Spent more than {value}",
+                    is_ai_generated=True,
+                )
+                reply_text = f"Great! The segment **{segment.name}** has been successfully created with {segment.customer_count} members. What would you like to do next? We can draft a campaign for them!"
+                
+                conversation_id = await save_chat_turn(
+                    db=db,
+                    conversation_id=request.conversation_id,
+                    history=history,
+                    db_context=db_context,
+                    user_message=msg,
+                    assistant_reply=reply_text,
+                )
+                return ChatResponse(
+                    reply=reply_text,
+                    conversation_id=conversation_id,
+                    actions_taken=[{
+                        "type": "create_segment",
+                        "arguments": {"name": segment_name, "rules": rules, "persist": True},
+                        "result": {"persisted": True, "segment_id": str(segment.id), "name": segment.name, "customer_count": segment.customer_count},
+                    }],
+                )
+            
+            # Check for "inactive" preview
+            inactive_preview_match = re.search(r"Preview: found \d+ customers inactive for more than (\d+) days", last_msg)
+            if inactive_preview_match:
+                days = int(inactive_preview_match.group(1))
+                rules = [{"field": "last_order_date", "operator": "days_ago_gt", "value": days}]
+                segment_name = f"Inactive Customers - {days} Days"
+                description = f"Customers who have been inactive for the past {days} days"
+                
+                segment = await create_segment_with_members(
+                    db=db,
+                    name=segment_name,
+                    description=description,
+                    rules=rules,
+                    natural_language_query=f"Inactive for {days} days",
+                    is_ai_generated=True,
+                )
+                reply_text = f"Great! The segment **{segment.name}** has been successfully created with {segment.customer_count} members. Want me to draft a win-back campaign?"
+                
+                conversation_id = await save_chat_turn(
+                    db=db,
+                    conversation_id=request.conversation_id,
+                    history=history,
+                    db_context=db_context,
+                    user_message=msg,
+                    assistant_reply=reply_text,
+                )
+                return ChatResponse(
+                    reply=reply_text,
+                    conversation_id=conversation_id,
+                    actions_taken=[{
+                        "type": "create_segment",
+                        "arguments": {"name": segment_name, "rules": rules, "persist": True},
+                        "result": {"persisted": True, "segment_id": str(segment.id), "name": segment.name, "customer_count": segment.customer_count},
+                    }],
+                )
+
         inactive_days = parse_inactive_segment_request(msg)
         if inactive_days is not None:
             rules = [{"field": "last_order_date", "operator": "days_ago_gt", "value": inactive_days}]
