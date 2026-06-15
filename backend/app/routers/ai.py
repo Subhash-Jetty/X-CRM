@@ -98,6 +98,29 @@ def wants_campaign_launch(message: str) -> bool:
     ) and bool(re.search(r"\bcamp(?:aign|iagn)\b", message, re.IGNORECASE))
 
 
+def wants_campaign_creation(message: str) -> bool:
+    """Return true when the marketer asks to create a campaign draft."""
+    return bool(
+        re.search(r"\b(create|make|build|draft|prepare|set\s+up)\b", message, re.IGNORECASE)
+    ) and bool(re.search(r"\bcamp(?:aign|iagn)\b", message, re.IGNORECASE))
+
+
+def mentions_high_value_audience(message: str) -> bool:
+    """Return true when the marketer refers to the common high-value audience."""
+    return bool(
+        re.search(r"\b(high[-\s]?value|vip|big\s+spender|top\s+customer)", message, re.IGNORECASE)
+        or re.search(r"\bspent\s+(?:more\s+than|over|above)\s*[\d,.]+", message, re.IGNORECASE)
+    )
+
+
+def infer_campaign_channel(message: str) -> str:
+    """Infer the requested campaign channel from the marketer's message."""
+    for channel in ("whatsapp", "sms", "email", "rcs"):
+        if re.search(rf"\b{channel}\b", message, re.IGNORECASE):
+            return channel
+    return "whatsapp"
+
+
 def parse_inactive_segment_request(message: str) -> int | None:
     """Extract N from requests like 'inactive for the past 15 days'."""
     inactive_terms = (
@@ -211,6 +234,65 @@ async def launch_campaign_from_chat(db: AsyncSession, message: str) -> tuple[str
         reply = f'Launched "{campaign.name}" to {send_result["recipients"]} recipients.'
     else:
         reply = f'Campaign "{campaign.name}" was created, but launch failed: {send_result.get("error", "unknown error")}'
+
+    return reply, actions_taken
+
+
+async def create_high_value_campaign_from_chat(
+    db: AsyncSession,
+    message: str,
+    launch: bool = False,
+) -> tuple[str, list[dict]]:
+    """Create a high-value customer campaign without relying on an LLM provider."""
+    channel = infer_campaign_channel(message)
+    segment = await ensure_high_value_segment(db)
+    campaign = Campaign(
+        name=f"High-Value {channel.title()} Campaign {uuid4().hex[:6].upper()}",
+        segment_id=segment.id,
+        message_template=(
+            "Hi {{first_name}}, thanks for being one of our valued BeanBox customers. "
+            "Here is an exclusive reward just for you. Visit us today to redeem it."
+        ),
+        channel=channel,
+    )
+    db.add(campaign)
+    await db.flush()
+
+    actions_taken = [{
+        "type": "create_campaign",
+        "arguments": {
+            "name": campaign.name,
+            "segment_id": str(segment.id),
+            "channel": campaign.channel,
+        },
+        "result": {
+            "campaign_id": str(campaign.id),
+            "name": campaign.name,
+            "status": "draft",
+            "segment_id": str(segment.id),
+            "segment_name": segment.name,
+            "customer_count": segment.customer_count,
+        },
+    }]
+
+    if not launch:
+        reply = (
+            f'Created "{campaign.name}" for "{segment.name}" '
+            f"({segment.customer_count} customers). Say 'launch this campaign' when you want to send it."
+        )
+        return reply, actions_taken
+
+    send_result = await execute_tool_call(db, "send_campaign", {"campaign_id": str(campaign.id)})
+    actions_taken.append({
+        "type": "send_campaign",
+        "arguments": {"campaign_id": str(campaign.id)},
+        "result": send_result,
+    })
+
+    if send_result.get("status") == "sent":
+        reply = f'Created and launched "{campaign.name}" to {send_result["recipients"]} recipients.'
+    else:
+        reply = f'Created "{campaign.name}", but launch failed: {send_result.get("error", "unknown error")}'
 
     return reply, actions_taken
 
@@ -501,6 +583,29 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             if not rules_match:
                 # Fall through to LLM for handling
                 pass
+
+    if (
+        (wants_campaign_creation(msg) or wants_campaign_launch(msg))
+        and mentions_high_value_audience(msg)
+    ):
+        reply_text, campaign_actions = await create_high_value_campaign_from_chat(
+            db=db,
+            message=msg,
+            launch=wants_campaign_launch(msg),
+        )
+        conversation_id = await save_chat_turn(
+            db=db,
+            conversation_id=request.conversation_id,
+            history=history,
+            db_context=db_context,
+            user_message=request.message,
+            assistant_reply=reply_text,
+        )
+        return ChatResponse(
+            reply=reply_text,
+            conversation_id=conversation_id,
+            actions_taken=campaign_actions,
+        )
 
     try:
         inactive_days = parse_inactive_segment_request(msg)

@@ -8,6 +8,7 @@ import asyncio
 from uuid import UUID
 from datetime import datetime
 from groq import AsyncGroq
+from google.api_core.exceptions import ResourceExhausted
 import google.generativeai as genai
 
 from app.config import settings
@@ -312,6 +313,13 @@ async def chat_with_ai(
 
             except asyncio.TimeoutError:
                 logger.warning("Gemini call timed out after %s seconds", GEMINI_CALL_TIMEOUT)
+            except ResourceExhausted:
+                logger.warning("Gemini provider quota exhausted")
+                return (
+                    "The Gemini free-tier quota is temporarily exhausted. "
+                    "Please try again after the quota window resets, or use Groq as the active provider.",
+                    tool_calls_made,
+                )
             except Exception:
                 logger.exception("Gemini provider error")
 
@@ -372,6 +380,8 @@ Requirements:
                 timeout=15.0
             )
             return response.text.strip()
+    except ResourceExhausted:
+        logger.warning("Gemini quota exhausted for message draft")
     except Exception as e:
         logger.error(f"Both providers failed for message draft: {e}")
 
