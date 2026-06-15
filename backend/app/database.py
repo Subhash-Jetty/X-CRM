@@ -1,6 +1,8 @@
 """
 Database connection and session management using SQLAlchemy async.
 """
+from typing import Any
+
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
@@ -12,26 +14,32 @@ class Base(DeclarativeBase):
     pass
 
 
-# Create engine with driver-specific options (sqlite vs asyncpg)
-db_url = settings.DATABASE_URL.strip()
-use_sqlite = db_url.startswith("sqlite") or "aiosqlite" in db_url
+def is_sqlite_url(db_url: str) -> bool:
+    """Return whether the configured database URL targets SQLite."""
+    return db_url.startswith("sqlite") or "aiosqlite" in db_url
 
-if use_sqlite:
-    engine = create_async_engine(
-        db_url,
-        echo=settings.DEBUG,
-    )
-else:
-    engine = create_async_engine(
-        db_url,
-        echo=settings.DEBUG,
-        pool_size=5,
-        max_overflow=10,
-        pool_pre_ping=True,
-        connect_args={
-            "statement_cache_size": 0,   # Disable asyncpg's statement cache
+
+def build_engine_kwargs(db_url: str, debug: bool) -> dict[str, Any]:
+    """Build driver-specific SQLAlchemy engine options."""
+    if is_sqlite_url(db_url):
+        return {"echo": debug}
+
+    return {
+        "echo": debug,
+        "pool_size": 5,
+        "max_overflow": 10,
+        "pool_pre_ping": True,
+        "connect_args": {
+            # Supabase's transaction pooler uses PgBouncer, so disable both
+            # asyncpg's cache and SQLAlchemy's asyncpg prepared statement cache.
+            "statement_cache_size": 0,
+            "prepared_statement_cache_size": 0,
         },
-    )
+    }
+
+
+db_url = settings.DATABASE_URL.strip()
+engine = create_async_engine(db_url, **build_engine_kwargs(db_url, settings.DEBUG))
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 async_session_maker = async_session  # Alias used by seed scripts
