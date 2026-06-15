@@ -12,7 +12,7 @@ function resolveApiBaseUrl(): string {
       return `http://${host}:8000/api`;
     }
 
-    return 'https://xeno-backend.onrender.com/api';
+    return 'https://xeno-backend-jimp.onrender.com/api';
   }
 
   // Fallback for server-side execution

@@ -3,7 +3,7 @@ Customer ingestion and data management service.
 """
 from datetime import datetime
 from uuid import UUID
-from sqlalchemy import select, func, update, insert
+from sqlalchemy import select, func, update, insert, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -187,7 +187,7 @@ async def _update_all_customer_aggregates(db: AsyncSession):
             total_spend=stats_sub.c.total_spend,
             first_order_date=stats_sub.c.first_order_date,
             last_order_date=stats_sub.c.last_order_date,
-            avg_order_value=func.case(
+            avg_order_value=case(
                 (stats_sub.c.order_count > 0,
                  stats_sub.c.total_spend / stats_sub.c.order_count),
                 else_=0,

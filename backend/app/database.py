@@ -28,7 +28,6 @@ else:
         pool_size=5,
         max_overflow=10,
         pool_pre_ping=True,
-        prepared_statement_cache_size=0, # Disable SQLAlchemy's statement cache
         connect_args={
             "statement_cache_size": 0,   # Disable asyncpg's statement cache
         },
