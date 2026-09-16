@@ -18,7 +18,11 @@ type Campaign = {
   status: string;
   total_recipients?: number;
   sent_count?: number;
+  delivered_count?: number;
   failed_count?: number;
+  opened_count?: number;
+  clicked_count?: number;
+  converted_count?: number;
   sent_at?: string | null;
   stats?: CampaignStats;
 };
@@ -63,17 +67,20 @@ export default function CampaignsPage() {
     try {
       const data = (await fetchApi("/campaigns")) as Campaign[];
 
-      // Fetch stats for each campaign
-      const campaignsWithStats = await Promise.all(
-        data.map(async (c) => {
-          try {
-            const stats = (await fetchApi(`/campaigns/${c.id}/stats`)) as CampaignStats;
-            return { ...c, stats };
-          } catch {
-            return c;
-          }
-        })
-      );
+      // Compute stats client-side from counters already in the response
+      // instead of making N separate HTTP calls to /campaigns/{id}/stats
+      const campaignsWithStats = data.map((c) => {
+        const total = c.total_recipients || 1;
+        return {
+          ...c,
+          stats: {
+            delivery_rate: total ? Math.round((c.delivered_count || 0) / total * 1000) / 10 : 0,
+            open_rate: total ? Math.round((c.opened_count || 0) / total * 1000) / 10 : 0,
+            click_rate: total ? Math.round((c.clicked_count || 0) / total * 1000) / 10 : 0,
+            conversion_rate: total ? Math.round((c.converted_count || 0) / total * 1000) / 10 : 0,
+          },
+        };
+      });
 
       setCampaigns(campaignsWithStats);
     } catch (error) {
@@ -94,7 +101,7 @@ export default function CampaignsPage() {
 
     const interval = setInterval(() => {
       loadCampaigns(false); // Silent refresh (no loading spinner)
-    }, 5000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [campaigns, loadCampaigns]);

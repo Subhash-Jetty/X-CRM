@@ -29,6 +29,8 @@ type Campaign = {
   channel: string;
   status: string;
   total_recipients?: number;
+  delivered_count?: number;
+  converted_count?: number;
   sent_at?: string | null;
   stats?: CampaignStats;
 };
@@ -36,6 +38,7 @@ type Campaign = {
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [totalCampaignCount, setTotalCampaignCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [creatingSegment, setCreatingSegment] = useState<string | null>(null);
@@ -56,18 +59,19 @@ export default function DashboardPage() {
     async function loadCampaigns() {
       try {
         const data = (await fetchApi("/campaigns")) as Campaign[];
-        // Get stats for first 4 campaigns
+        setTotalCampaignCount(data.length);
+        // Compute stats client-side from counters already in the response
         const recent = data.slice(0, 4);
-        const withStats = await Promise.all(
-          recent.map(async (c) => {
-            try {
-              const s = (await fetchApi(`/campaigns/${c.id}/stats`)) as CampaignStats;
-              return { ...c, stats: s };
-            } catch {
-              return c;
-            }
-          })
-        );
+        const withStats = recent.map((c) => {
+          const total = c.total_recipients || 1;
+          return {
+            ...c,
+            stats: {
+              delivery_rate: total ? Math.round((c.delivered_count || 0) / total * 1000) / 10 : 0,
+              conversion_rate: total ? Math.round((c.converted_count || 0) / total * 1000) / 10 : 0,
+            },
+          };
+        });
         setCampaigns(withStats);
       } catch (error) {
         console.error("Failed to load campaigns:", error);
@@ -216,7 +220,7 @@ export default function DashboardPage() {
               <div className="stat-label">Total Campaigns</div>
             </div>
             <div className="stat-value">
-              {campaigns.length || "0"}
+              {totalCampaignCount || "0"}
             </div>
             <div className="stat-change neutral">
               <span className="stat-change-icon" style={{ opacity: 0.5 }}>

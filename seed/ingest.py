@@ -10,6 +10,15 @@ sys.path.insert(0, backend_dir)
 # Change working directory to backend so pydantic-settings finds .env
 os.chdir(backend_dir)
 
+# By default, run ingestion against a local SQLite file so the seed script
+# works offline and doesn't attempt to connect to a remote DB defined in
+# backend/.env. Set `USE_REMOTE_DB=1` in the environment to opt out and
+# force use of the configured DATABASE_URL instead.
+if not os.environ.get("USE_REMOTE_DB"):
+    sqlite_path = os.path.join(backend_dir, "xeno.db")
+    os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{sqlite_path}"
+    print("[seed] Using local SQLite for ingestion:", os.environ["DATABASE_URL"])
+
 from app.database import engine, async_session_maker
 from app.services.ingestion import ingest_customers, ingest_orders
 from app.models import Base

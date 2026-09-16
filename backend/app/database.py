@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 
@@ -24,18 +25,33 @@ def build_engine_kwargs(db_url: str, debug: bool) -> dict[str, Any]:
     if is_sqlite_url(db_url):
         return {"echo": debug}
 
-    return {
+    # Disable asyncpg and SQLAlchemy prepared-statement caches — these cause
+    # conflicts when used with pgBouncer-style transaction poolers.
+    connect_args = {
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+    }
+
+    kwargs: dict[str, Any] = {
         "echo": debug,
+        "pool_pre_ping": True,
+        "connect_args": connect_args,
+    }
+
+    # If the URL points at a pooler (pgbouncer / Supabase pooler), prefer
+    # `NullPool` to avoid reusing DBAPI connections which can lead to
+    # prepared-statement name collisions across pooled connections.
+    if "pooler" in db_url or "pgbouncer" in db_url:
+        kwargs["poolclass"] = NullPool
+        return kwargs
+
+    # Default pooling for direct DB connections
+    kwargs.update({
         "pool_size": 5,
         "max_overflow": 10,
-        "pool_pre_ping": True,
-        "connect_args": {
-            # Supabase's transaction pooler uses PgBouncer, so disable both
-            # asyncpg's cache and SQLAlchemy's asyncpg prepared statement cache.
-            "statement_cache_size": 0,
-            "prepared_statement_cache_size": 0,
-        },
-    }
+    })
+
+    return kwargs
 
 
 db_url = settings.DATABASE_URL.strip()

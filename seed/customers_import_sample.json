@@ -1,0 +1,124 @@
+{
+  "customers": [
+    {
+      "name": "Rohit Gupta",
+      "email": "rohit.gupta.demo001@example.com",
+      "phone": "+919800000001",
+      "tags": ["vip", "newsletter_subscriber"]
+    },
+    {
+      "name": "Simran Gupta",
+      "email": "simran.gupta.demo002@example.com",
+      "phone": "+919800000002",
+      "tags": ["vip", "frequent_buyer"]
+    },
+    {
+      "name": "Aditya Das",
+      "email": "aditya.das.demo003@example.com",
+      "phone": "+919800000003",
+      "tags": ["high_intent", "app_user"]
+    },
+    {
+      "name": "Akash Saxena",
+      "email": "akash.saxena.demo004@example.com",
+      "phone": "+919800000004",
+      "tags": ["newsletter_subscriber"]
+    },
+    {
+      "name": "Riya Iyer",
+      "email": "riya.iyer.demo005@example.com",
+      "phone": "+919800000005",
+      "tags": ["vip", "whatsapp_opt_in"]
+    },
+    {
+      "name": "Neha Sharma",
+      "email": "neha.sharma.demo006@example.com",
+      "phone": "+919800000006",
+      "tags": ["new_customer", "whatsapp_opt_in"]
+    },
+    {
+      "name": "Arjun Mehta",
+      "email": "arjun.mehta.demo007@example.com",
+      "phone": "+919800000007",
+      "tags": ["inactive", "email_opt_in"]
+    },
+    {
+      "name": "Priya Nair",
+      "email": "priya.nair.demo008@example.com",
+      "phone": "+919800000008",
+      "tags": ["frequent_buyer", "app_user"]
+    },
+    {
+      "name": "Karan Malhotra",
+      "email": "karan.malhotra.demo009@example.com",
+      "phone": "+919800000009",
+      "tags": ["vip", "sms_opt_in"]
+    },
+    {
+      "name": "Ananya Rao",
+      "email": "ananya.rao.demo010@example.com",
+      "phone": "+919800000010",
+      "tags": ["newsletter_subscriber", "email_opt_in"]
+    },
+    {
+      "name": "Vikram Singh",
+      "email": "vikram.singh.demo011@example.com",
+      "phone": "+919800000011",
+      "tags": ["inactive", "winback"]
+    },
+    {
+      "name": "Meera Kapoor",
+      "email": "meera.kapoor.demo012@example.com",
+      "phone": "+919800000012",
+      "tags": ["new_customer", "app_user"]
+    },
+    {
+      "name": "Sahil Verma",
+      "email": "sahil.verma.demo013@example.com",
+      "phone": "+919800000013",
+      "tags": ["frequent_buyer", "whatsapp_opt_in"]
+    },
+    {
+      "name": "Isha Menon",
+      "email": "isha.menon.demo014@example.com",
+      "phone": "+919800000014",
+      "tags": ["vip", "email_opt_in"]
+    },
+    {
+      "name": "Dev Patel",
+      "email": "dev.patel.demo015@example.com",
+      "phone": "+919800000015",
+      "tags": ["high_intent", "sms_opt_in"]
+    },
+    {
+      "name": "Kavya Jain",
+      "email": "kavya.jain.demo016@example.com",
+      "phone": "+919800000016",
+      "tags": ["newsletter_subscriber", "whatsapp_opt_in"]
+    },
+    {
+      "name": "Nikhil Bansal",
+      "email": "nikhil.bansal.demo017@example.com",
+      "phone": "+919800000017",
+      "tags": ["inactive", "email_opt_in"]
+    },
+    {
+      "name": "Tanya Chawla",
+      "email": "tanya.chawla.demo018@example.com",
+      "phone": "+919800000018",
+      "tags": ["frequent_buyer", "app_user"]
+    },
+    {
+      "name": "Rahul Khanna",
+      "email": "rahul.khanna.demo019@example.com",
+      "phone": "+919800000019",
+      "tags": ["new_customer", "newsletter_subscriber"]
+    },
+    {
+      "name": "Aditi Kulkarni",
+      "email": "aditi.kulkarni.demo020@example.com",
+      "phone": "+919800000020",
+      "tags": ["vip", "whatsapp_opt_in", "frequent_buyer"]
+    }
+  ]
+}

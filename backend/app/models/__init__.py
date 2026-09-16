@@ -28,13 +28,16 @@ class Customer(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
-    orders = relationship("Order", back_populates="customer", lazy="selectin")
-    communications = relationship("Communication", back_populates="customer", lazy="selectin")
+    # Relationships — lazy="noload" prevents automatic loading of related rows;
+    # endpoints that need them must explicitly opt in with selectinload().
+    orders = relationship("Order", back_populates="customer", lazy="noload")
+    communications = relationship("Communication", back_populates="customer", lazy="noload")
 
     __table_args__ = (
         Index("idx_customers_total_spend", "total_spend"),
         Index("idx_customers_last_order", "last_order_date"),
+        Index("idx_customers_created_at", "created_at"),
+        Index("idx_customers_order_count", "order_count"),
     )
 
 
@@ -72,8 +75,8 @@ class Segment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    members = relationship("SegmentMember", back_populates="segment", lazy="selectin", cascade="all, delete-orphan")
-    campaigns = relationship("Campaign", back_populates="segment", lazy="selectin")
+    members = relationship("SegmentMember", back_populates="segment", lazy="noload", cascade="all, delete-orphan")
+    campaigns = relationship("Campaign", back_populates="segment", lazy="noload")
 
 
 class SegmentMember(Base):
@@ -115,7 +118,12 @@ class Campaign(Base):
 
     # Relationships
     segment = relationship("Segment", back_populates="campaigns")
-    communications = relationship("Communication", back_populates="campaign", lazy="selectin", cascade="all, delete-orphan")
+    communications = relationship("Communication", back_populates="campaign", lazy="noload", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_campaigns_segment_id", "segment_id"),
+        Index("idx_campaigns_created_at", "created_at"),
+    )
 
 
 class Communication(Base):

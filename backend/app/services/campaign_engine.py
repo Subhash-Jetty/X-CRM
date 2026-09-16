@@ -5,6 +5,8 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 import httpx
+import logging
+import asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,36 +85,86 @@ async def send_campaign(db: AsyncSession, campaign_id: UUID) -> int:
     try:
         channel_url = settings.CHANNEL_SERVICE_URL.rstrip("/")
         backend_url = settings.BACKEND_URL.rstrip("/")
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{channel_url}/channel/send",
-                json={
-                    "communications": communications_batch,
-                    "callback_url": f"{backend_url}/api/receipts/batch",
-                },
-            )
-        if 200 <= response.status_code < 300:
-            campaign.sent_count = len(communications_batch)
-            campaign.status = "sent"
-        else:
-            campaign.status = "failed"
-            campaign.failed_count = len(communications)
-            for comm in communications:
-                comm.status = "failed"
-                comm.failed_at = datetime.utcnow()
-                comm.error_message = f"Channel service rejected dispatch with HTTP {response.status_code}"
-            dispatch_error = (
-                f"Channel service rejected dispatch with HTTP {response.status_code}"
-            )
-    except httpx.RequestError as exc:
+        logger = logging.getLogger(__name__)
+
+        max_attempts = 3
+        backoff_base = 0.5
+        response = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(
+                        f"{channel_url}/channel/send",
+                        json={
+                            "communications": communications_batch,
+                            "callback_url": f"{backend_url}/api/receipts/batch",
+                        },
+                    )
+            except httpx.RequestError as exc:
+                logger.warning(
+                    "Attempt %s: error posting to channel service %s: %s",
+                    attempt,
+                    channel_url,
+                    exc,
+                )
+                if attempt < max_attempts:
+                    await asyncio.sleep(backoff_base * 2 ** (attempt - 1))
+                    continue
+                campaign.status = "failed"
+                campaign.failed_count = len(communications)
+                for comm in communications:
+                    comm.status = "failed"
+                    comm.failed_at = datetime.utcnow()
+                    comm.error_message = f"Channel service unreachable: {exc}"
+                dispatch_error = f"Channel service unreachable: {exc}"
+                break
+
+            # If we got a response, check status
+            if response is not None:
+                if 200 <= response.status_code < 300:
+                    campaign.sent_count = len(communications_batch)
+                    campaign.status = "sent"
+                    break
+
+                # Retry on server errors (5xx) as they may be transient
+                if 500 <= response.status_code < 600 and attempt < max_attempts:
+                    body = (response.text or "")[:1000]
+                    logger.warning(
+                        "Attempt %s: server error from channel service: %s %s",
+                        attempt,
+                        response.status_code,
+                        body,
+                    )
+                    await asyncio.sleep(backoff_base * 2 ** (attempt - 1))
+                    continue
+
+                # Non-retriable or exhausted retries: mark failed and record body
+                body = (response.text or "")[:1000]
+                logger.error("Channel service rejected dispatch: %s %s", response.status_code, body)
+                campaign.status = "failed"
+                campaign.failed_count = len(communications)
+                for comm in communications:
+                    comm.status = "failed"
+                    comm.failed_at = datetime.utcnow()
+                    comm.error_message = (
+                        f"Channel service rejected dispatch with HTTP {response.status_code}: {body}"
+                    )
+                dispatch_error = (
+                    f"Channel service rejected dispatch with HTTP {response.status_code}: {body}"
+                )
+                break
+
+    except Exception as exc:  # fallback for unexpected errors
+        logger = logging.getLogger(__name__)
+        logger.exception("Unexpected error dispatching campaign: %s", exc)
         campaign.status = "failed"
         campaign.failed_count = len(communications)
         for comm in communications:
             comm.status = "failed"
             comm.failed_at = datetime.utcnow()
-            comm.error_message = f"Channel service unreachable: {exc}"
-        dispatch_error = f"Channel service unreachable: {exc}"
+            comm.error_message = f"Unexpected dispatch error: {exc}"
+        dispatch_error = f"Unexpected dispatch error: {exc}"
 
     await db.flush()
     if dispatch_error:
