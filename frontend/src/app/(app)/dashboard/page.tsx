@@ -132,16 +132,22 @@ export default function DashboardPage() {
 
       {/* Stat Cards */}
       {loading ? (
-        <div className="grid-cols-4 stagger-children" style={{ marginBottom: 32 }}>
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="stat-card">
-              <div className="stat-header">
-                <div className="skeleton skeleton-circle" style={{ width: 40, height: 40, borderRadius: 10 }} />
-                <div className="skeleton skeleton-line skeleton-line-short" />
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: 'var(--text-secondary)', fontSize: 14 }}>
+            <div className="skeleton skeleton-circle" style={{ width: 16, height: 16, animationDuration: '1s' }} />
+            Waking up backend server (Render free tier may take ~60s)...
+          </div>
+          <div className="grid-cols-4 stagger-children">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="stat-card">
+                <div className="stat-header">
+                  <div className="skeleton skeleton-circle" style={{ width: 40, height: 40, borderRadius: 10 }} />
+                  <div className="skeleton skeleton-line skeleton-line-short" />
+                </div>
+                <div className="skeleton skeleton-line skeleton-line-medium" style={{ height: 36, marginTop: 16 }} />
               </div>
-              <div className="skeleton skeleton-line skeleton-line-medium" style={{ height: 36, marginTop: 16 }} />
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       ) : (
         <div className="grid-cols-4 stagger-children" style={{ marginBottom: 32 }}>
