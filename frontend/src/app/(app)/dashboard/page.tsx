@@ -110,8 +110,7 @@ export default function DashboardPage() {
   const formatCompact = (num: number): string => {
     if (num >= 10000000) return (num / 10000000).toFixed(2).replace(/\.?0+$/, '') + ' Cr';
     if (num >= 100000) return (num / 100000).toFixed(2).replace(/\.?0+$/, '') + ' L';
-    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.?0+$/, '') + 'K';
-    return num.toLocaleString();
+    return num.toLocaleString('en-IN');
   };
 
   return (
@@ -171,7 +170,7 @@ export default function DashboardPage() {
               <div className="stat-label">Total Customers</div>
             </div>
             <div className="stat-value">
-              {stats?.total_customers?.toLocaleString() || "0"}
+              {stats?.total_customers?.toLocaleString('en-IN') || "0"}
             </div>
             <div className="stat-change positive">
               <span className="stat-change-icon">
