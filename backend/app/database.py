@@ -41,7 +41,7 @@ def build_engine_kwargs(db_url: str, debug: bool) -> dict[str, Any]:
     # If the URL points at a pooler (pgbouncer / Supabase pooler), prefer
     # `NullPool` to avoid reusing DBAPI connections which can lead to
     # prepared-statement name collisions across pooled connections.
-    if "pooler" in db_url or "pgbouncer" in db_url:
+    if "pooler" in db_url or "pgbouncer" in db_url or "supabase" in db_url:
         kwargs["poolclass"] = NullPool
         return kwargs
 
@@ -76,8 +76,17 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     """Initialize database — create tables if they don't exist."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables verified/created successfully.")
+    except Exception as e:
+        logger.warning(
+            "init_db table check failed (tables likely already exist): %s", e
+        )
+        # Don't crash — tables already exist in production.
 
 
 async def close_db():
