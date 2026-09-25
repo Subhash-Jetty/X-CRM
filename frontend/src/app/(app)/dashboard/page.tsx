@@ -107,6 +107,13 @@ export default function DashboardPage() {
 
   const greeting = getGreeting();
 
+  const formatCompact = (num: number): string => {
+    if (num >= 10000000) return (num / 10000000).toFixed(2).replace(/\.?0+$/, '') + ' Cr';
+    if (num >= 100000) return (num / 100000).toFixed(2).replace(/\.?0+$/, '') + ' L';
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.?0+$/, '') + 'K';
+    return num.toLocaleString();
+  };
+
   return (
     <div className="animate-fade-in">
       {/* Page Header */}
@@ -184,8 +191,8 @@ export default function DashboardPage() {
               </div>
               <div className="stat-label">Total Revenue</div>
             </div>
-            <div className="stat-value" style={{ color: "var(--success)" }}>
-              &#8377;{stats?.total_revenue?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || "0"}
+            <div className="stat-value" style={{ color: "var(--success)" }} title={`₹${stats?.total_revenue?.toLocaleString('en-IN') || '0'}`}>
+              &#8377;{formatCompact(stats?.total_revenue || 0)}
             </div>
             <div className="stat-change positive">
               <span className="stat-change-icon">
